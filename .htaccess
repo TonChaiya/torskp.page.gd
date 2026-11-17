@@ -1,0 +1,19 @@
+AddDefaultCharset UTF-8
+Options -Indexes
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<FilesMatch "^(?:composer\.(?:json|lock)|\.env(?:\..*)?|.*\.(?:sql|log|ini))$">
+    Require all denied
+</FilesMatch>
+
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^(?:composer\.(?:json|lock)|\.env(?:\..*)?|.*\.(?:sql|log|ini))$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
