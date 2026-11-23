@@ -493,6 +493,17 @@ function reportItems(array $medicines, array $procurementCases = []): array
     return $items;
 }
 
+function torFiscalYearForCase(array $cases, int $caseId): string
+{
+    foreach ($cases as $case) {
+        if ((int) ($case['id'] ?? 0) === $caseId) {
+            $year = trim((string) ($case['fiscal_year'] ?? ''));
+            return $year !== '' ? thaiDigits($year) : '................';
+        }
+    }
+    return '................';
+}
+
 function reportHtml(array $report): string
 {
     $refTotal = array_sum(array_column($report['items'], 'reference_total'));
@@ -586,7 +597,7 @@ function reportHtml(array $report): string
             <div class="stars">******************************</div>
 
             <div class="section-title">1. หลักการและเหตุผล</div>
-            <p>ด้วยหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง จะดำเนินการจัดซื้อยา                       ในบัญชียาหลักแห่งชาติ เพื่อสนับสนุนการให้บริการรักษาประชาชน ของหน่วยบริการประจำและ                 เครือข่ายปฐมภูมิจำนวน 5 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่ ตามแผนงบประมาณเงินบำรุง โรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ปรับปรุงครั้งที่ 1 ปีงบประมาณ 2569 หมวดค่าเวชภัณฑ์ยา ตั้งไว้ 2,000,000.00 บาท ( สองล้านบาทถ้วน )</p>
+            <p>ด้วยหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง จะดำเนินการจัดซื้อยา                       ในบัญชียาหลักแห่งชาติ เพื่อสนับสนุนการให้บริการรักษาประชาชน ของหน่วยบริการประจำและ                 เครือข่ายปฐมภูมิจำนวน 5 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่ ตามแผนงบประมาณเงินบำรุง โรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ปรับปรุงครั้งที่ 1 ปีงบประมาณ <?= h((string) ($report['fiscal_year'] ?? '................')) ?> หมวดค่าเวชภัณฑ์ยา ตั้งไว้ 2,000,000.00 บาท ( สองล้านบาทถ้วน )</p>
 
             <div class="section-title">2. วัตถุประสงค์</div>
             <p>สำหรับใช้ในการให้บริการรักษาพยาบาลผู้ป่วย เพื่อให้ยาเพียงพอ พร้อมใช้ มีคุณภาพต่อการให้บริการประชาชนของหน่วยบริการประจำและเครือข่ายปฐมภูมิจำนวน 5 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่</p>
@@ -923,6 +934,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
                 'committee' => $committee,
                 'items' => $items,
                 'price_source' => $priceSource,
+                'fiscal_year' => torFiscalYearForCase($data['procurement_cases'], (int) post('case_id')),
             ]));
         }
     }
@@ -941,6 +953,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
                 'committee' => $committee,
                 'items' => $items,
                 'price_source' => $priceSource,
+                'fiscal_year' => torFiscalYearForCase($data['procurement_cases'], $caseId),
             ]);
             try {
                 outputWordHtml($torWordHtml, torCompanyPurchaseWordFilename($caseId, $items), '', 'tor');

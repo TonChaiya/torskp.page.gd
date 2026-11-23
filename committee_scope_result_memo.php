@@ -17,6 +17,7 @@ function memoPerson($person, string $role): array {
 $caseId = (int) ($_POST['case_id'] ?? $_GET['case_id'] ?? 0);
 $case = $caseId > 0 ? procurementCase($caseId) : null;
 $caseOptions = procurementCases();
+$caseFiscalYear = $case ? thaiMemoDigits(trim((string) ($case['fiscal_year'] ?? ''))) : '';
 $saved = $case ? procurementDocument($caseId, 'committee_scope_result_memo') : null;
 $extra = is_array($saved['extra'] ?? null) ? $saved['extra'] : [];
 $invitation = $case ? procurementDocument($caseId, 'committee_scope_invitation') : null;
@@ -284,7 +285,7 @@ if (($_POST['action']??'')==='save_document') {
               <?php foreach ($caseOptions as $choice): ?><option value="<?= (int)$choice['id'] ?>" <?= (int)$choice['id']===$caseId?'selected':'' ?>>#<?= (int)$choice['id'] ?> — <?=h((string)$choice['title'])?></option><?php endforeach ?>
             </select>
           </form>
-          <div class="result-facts"><span class="result-fact">รายการยา <?=h($count)?> รายการ</span><span class="result-fact">อ้างอิงหนังสือแต่งตั้ง <?=h($invNo!==''?$invNo:'ยังไม่ระบุ')?></span></div>
+          <div class="result-facts"><span class="result-fact">ปีงบประมาณ พ.ศ. <?= h($caseFiscalYear !== '' ? $caseFiscalYear : 'ยังไม่ระบุ') ?></span><span class="result-fact">รายการยา <?=h($count)?> รายการ</span><span class="result-fact">อ้างอิงหนังสือแต่งตั้ง <?=h($invNo!==''?$invNo:'ยังไม่ระบุ')?></span></div>
           <p class="result-case-hint">รายการยาและกรรมการดึงจาก TOR ที่บันทึกไว้ ไม่ต้องกรอกซ้ำ</p>
         </div>
         <div class="result-alerts" style="padding:12px 18px 0; margin:0;">
@@ -295,7 +296,7 @@ if (($_POST['action']??'')==='save_document') {
         <form id="memo-form" method="post" class="result-form">
           <input type="hidden" name="action" value="save_document"><input type="hidden" name="csrf_token" value="<?=h(csrfToken())?>"><input type="hidden" name="case_id" value="<?= $caseId ?>">
           <section class="result-group" aria-labelledby="result-group-main">
-            <div class="result-group-title"><span class="result-group-number">1</span><span class="result-group-heading"><strong id="result-group-main">ข้อมูลสำคัญ</strong><small>เลขหนังสือและวันที่ออกบันทึก</small></span></div>
+            <div class="result-group-title"><span class="result-group-number">1</span><span class="result-group-heading"><strong id="result-group-main">เลขหนังสือและวันที่</strong><small>ข้อมูลที่ต้องกรอกก่อนบันทึก</small></span></div>
             <div class="result-group-content">
               <div class="result-two-col">
                 <label class="result-field-label">เลขหนังสือ หลัง /<input class="result-input" name="memo_no_suffix" value="<?=h($memoNo)?>" placeholder="เช่น 123" autocomplete="off"></label>
@@ -305,7 +306,7 @@ if (($_POST['action']??'')==='save_document') {
             </div>
           </section>
           <details class="result-group" id="result-group-body">
-            <summary class="result-group-title"><span class="result-group-number">2</span><span class="result-group-heading"><strong>ข้อความบันทึก</strong><small>เติมค่าเริ่มต้นจากข้อมูลโครงการแล้ว</small></span><span class="result-chevron" aria-hidden="true">⌄</span></summary>
+            <summary class="result-group-title"><span class="result-group-number">2</span><span class="result-group-heading"><strong>เนื้อหาและเอกสารอ้างอิง</strong><small>ต้นเรื่อง ข้อเท็จจริง และข้อพิจารณา</small></span><span class="result-chevron" aria-hidden="true">⌄</span></summary>
             <div class="result-group-content">
               <label class="result-field-label">ส่วนราชการ<input class="result-input" name="office" value="<?=h($values['office'])?>"></label>
               <label class="result-field-label">เรื่อง<textarea class="result-input" name="subject" rows="3"><?=h($values['subject'])?></textarea></label>

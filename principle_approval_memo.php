@@ -426,7 +426,10 @@ $committeeSets = db()->query('SELECT * FROM committee_sets ORDER BY title')->fet
 $department = 'กองสาธารณสุข หน่วยบริการประจำ รพ.สต.บ้านสันโค้ง อ.สันกำแพง โทร. 05333 1362';
 $memoNoSuffix = field('memo_no_suffix', '');
 $docDate = field('doc_date', '');
-$fiscalYear = thaiDigits('2569');
+// ปีงบประมาณเป็นข้อมูลของชุดเอกสาร (พ.ศ.) แยกจากปีของวันที่เอกสาร
+$thaiToday = new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+$currentFiscalYear = (int) $thaiToday->format('Y') + 543 + ((int) $thaiToday->format('n') >= 10 ? 1 : 0);
+$fiscalYear = thaiDigits(field('fiscal_year', (string) $currentFiscalYear));
 $planApprovedDate = field('plan_approved_date', '17 กรกฏาคม 2569');
 $planRevisionNote = field('plan_revision_note', 'ปรับปรุงครั้งที่ 3');
 $budgetAmountInput = rawField('budget_amount', '3000000');
@@ -437,6 +440,7 @@ $signerPosition = field('signer_position', (string) $principleSignerDefaults['pr
 $directorName = field('director_name', (string) $principleSignerDefaults['approver_name']);
 $directorPosition = field('director_position', (string) $principleSignerDefaults['approver_position']);
 if ($activeCase && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    $fiscalYear = thaiDigits((string) ($activeCase['fiscal_year'] ?? ''));
     $memoNoSuffix = thaiDigits((string) ($activeCase['principle_memo_no_suffix'] ?? $memoNoSuffix));
     $docDate = thaiDigits((string) ($activeCase['principle_doc_date'] ?? $docDate));
     $activePlanApprovedDate = trim((string) ($activeCase['plan_approved_date'] ?? ''));
@@ -579,7 +583,10 @@ if (($_POST['action'] ?? '') === 'word') {
 }
 
 if (($_POST['action'] ?? '') === 'save_case') {
-    if (!$budgetInputValid) {
+    $normalizedFiscalYear = arabicDigits(trim($fiscalYear));
+    if (!preg_match('/^2[4-9][0-9]{2}$/', $normalizedFiscalYear)) {
+        $saveError = 'กรุณาระบุปีงบประมาณ พ.ศ. เป็นตัวเลข 4 หลัก เช่น 2570';
+    } elseif (!$budgetInputValid) {
         $saveError = 'กรุณากรอกวงเงินเป็นตัวเลขไม่เกิน 12 หลัก และทศนิยมไม่เกิน 2 ตำแหน่ง';
     } elseif (trim($memoNoSuffix) === '' || trim($docDate) === '') {
         $saveError = 'กรุณากรอกเลขที่หลัง / และวันที่ ของหัวข้อ 1 ก่อนบันทึก';
@@ -595,7 +602,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
     $caseId = saveProcurementCase([
         'id' => $caseId,
         'title' => $caseTitle,
-        'fiscal_year' => $fiscalYear,
+        'fiscal_year' => arabicDigits($fiscalYear),
         'plan_approved_date' => $planApprovedDate,
         'plan_revision_note' => $planRevisionNote,
         'budget_amount' => $budgetAmount,
@@ -793,22 +800,26 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
         <form id="principle_case_form" method="post" action="principle_approval_memo.php" class="grid gap-4">
             <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
             <input type="hidden" name="case_id" value="<?= (int) $caseId ?>">
-            <section class="rounded-md border border-zinc-800 p-3">
-                <div class="mb-3 text-sm font-medium text-emerald-300">1. ข้อมูลเอกสาร</div>
-                <?php
-                $controls = [
-                    'memo_no_suffix' => ['เลขที่หลัง /', $memoNoSuffix],
-                    'doc_date' => ['วันที่', $docDate],
-                    'plan_approved_date' => ['วันที่อนุมัติแผน', $planApprovedDate],
-                    'plan_revision_note' => ['ปรับปรุงครั้งที่', $planRevisionNote],
-                ];
-                $dateFields = ['doc_date', 'plan_approved_date'];
-                foreach ($controls as $name => [$label, $value]):
-                    $datePickerAttr = in_array($name, $dateFields, true) ? ' data-thai-date-picker="1"' : '';
-                ?>
+            <section class="rounded-md border border-zinc-800 p-3" aria-labelledby="principle-primary-data">
+                <div id="principle-primary-data" class="mb-2 text-sm font-semibold text-emerald-300">1. ข้อมูลโครงการและหนังสือ</div>
+                <p class="mb-3 text-xs text-zinc-500">ระบุปีงบประมาณของชุดเอกสารตั้งแต่ขั้นตอนแรก วันที่ในหนังสือเป็นคนละข้อมูล</p>
+                <label class="mb-3 block">
+                    <span class="text-xs text-zinc-400">ปีงบประมาณ พ.ศ. <span aria-hidden="true">*</span></span>
+                    <input name="fiscal_year" data-field="fiscal_year" inputmode="numeric" maxlength="4" required value="<?= h($fiscalYear) ?>" placeholder="เช่น ๒๕๗๐" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                </label>
+                <?php foreach (['memo_no_suffix' => ['เลขที่หนังสือ หลัง /', $memoNoSuffix], 'doc_date' => ['วันที่ออกบันทึก', $docDate]] as $name => [$label, $value]): ?>
                     <label class="mb-2 block">
                         <span class="text-xs text-zinc-400"><?= h($label) ?></span>
-                        <input name="<?= h($name) ?>" data-field="<?= h($name) ?>"<?= $datePickerAttr ?> value="<?= h($value) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                        <input name="<?= h($name) ?>" data-field="<?= h($name) ?>"<?= $name === 'doc_date' ? ' data-thai-date-picker="1"' : '' ?> value="<?= h($value) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                    </label>
+                <?php endforeach; ?>
+            </section>
+            <section class="rounded-md border border-zinc-800 p-3" aria-labelledby="principle-budget-data">
+                <div id="principle-budget-data" class="mb-3 text-sm font-semibold text-emerald-300">2. ข้อมูลแผนและวงเงินงบประมาณ</div>
+                <?php foreach (['plan_approved_date' => ['วันที่อนุมัติแผน', $planApprovedDate], 'plan_revision_note' => ['ปรับปรุงครั้งที่', $planRevisionNote]] as $name => [$label, $value]): ?>
+                    <label class="mb-2 block">
+                        <span class="text-xs text-zinc-400"><?= h($label) ?></span>
+                        <input name="<?= h($name) ?>" data-field="<?= h($name) ?>"<?= $name === 'plan_approved_date' ? ' data-thai-date-picker="1"' : '' ?> value="<?= h($value) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
                     </label>
                 <?php endforeach; ?>
                 <label class="mb-2 block">
@@ -820,7 +831,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
 
             <section class="rounded-md border border-zinc-800 p-3">
                 <div class="mb-3 flex items-center justify-between gap-2">
-                    <div class="text-sm font-medium text-emerald-300">2. รายการยา</div>
+                    <div class="text-sm font-medium text-emerald-300">3. รายการยา</div>
                     <button type="button" id="add_medicine" class="rounded-md border border-zinc-700 px-2 py-1 text-xs hover:border-emerald-400">เพิ่มรายการ</button>
                 </div>
                 <div id="medicine_rows" class="grid gap-3">
@@ -851,7 +862,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
 
             <section class="rounded-md border border-zinc-800 p-3">
                 <div class="mb-3 flex items-center justify-between gap-2">
-                    <div class="text-sm font-medium text-emerald-300">3. คณะกรรมการ</div>
+                    <div class="text-sm font-medium text-emerald-300">4. คณะกรรมการ</div>
                     <button type="button" id="open_committee_modal" class="rounded-md border border-emerald-500/60 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/10">เลือกชุดกรรมการ</button>
                 </div>
                 <?php
@@ -871,7 +882,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
             </section>
 
             <section class="rounded-md border border-zinc-800 p-3">
-                <div class="mb-3 text-sm font-medium text-emerald-300">4. ผู้ลงนาม</div>
+                <div class="mb-3 text-sm font-medium text-emerald-300">5. ผู้ลงนาม</div>
                 <label class="mb-2 block">
                     <span class="text-xs text-zinc-400">ชื่อผู้เสนอ</span>
                     <input name="signer_name" data-field="signer_name" value="<?= h($signerName) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">

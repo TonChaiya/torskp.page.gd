@@ -405,7 +405,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
 <?php require __DIR__ . '/components/navbar.php'; ?>
 <?php require __DIR__ . '/components/workflow_steps.php'; ?>
 
-<main class="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+<main class="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_420px]">
     <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
         <div class="mb-4 flex items-center justify-between gap-3">
             <h1 class="text-lg font-semibold">ข้อมูลเอกสาร</h1>
@@ -470,9 +470,20 @@ if (($_POST['action'] ?? '') === 'save_document') {
                 'signer_position' => $signerPosition,
             ];
             $dateFields = ['doc_date', 'principle_date', 'meeting_date'];
-            foreach ($controls as $name => $label):
-                $datePickerAttr = in_array($name, $dateFields, true) ? ' data-thai-date-picker="1"' : '';
+            $fieldGroups = [
+                '1. ข้อมูลหนังสือเชิญประชุม' => ['memo_no_suffix', 'doc_date'],
+                '2. อ้างอิงหนังสือขออนุมัติ' => ['principle_no_suffix', 'principle_date'],
+                '3. วันและเวลานัดประชุม' => ['meeting_date', 'meeting_time'],
+                '4. ข้อมูลผู้ลงนาม' => ['signer_signature', 'signer_name', 'signer_position'],
+            ];
+            foreach ($fieldGroups as $groupTitle => $groupFields):
             ?>
+            <section class="rounded-lg border border-zinc-800 p-3" aria-label="<?= h($groupTitle) ?>">
+                <h2 class="mb-3 text-sm font-semibold text-emerald-300"><?= h($groupTitle) ?></h2>
+                <?php foreach ($groupFields as $name):
+                    $label = $controls[$name];
+                    $datePickerAttr = in_array($name, $dateFields, true) ? ' data-thai-date-picker="1"' : '';
+                ?>
                 <label class="block">
                     <span class="text-sm text-zinc-300"><?= h($label) ?></span>
                     <?php if ($name === 'signer_position'): ?>
@@ -481,11 +492,20 @@ if (($_POST['action'] ?? '') === 'save_document') {
                         <input name="<?= h($name) ?>" data-field="<?= h($name) ?>"<?= $datePickerAttr ?> value="<?= h($controlValues[$name]) ?>" <?= $name === 'signer_name' ? 'readonly' : '' ?> class="mt-1 w-full rounded-md border border-zinc-700 <?= $name === 'signer_name' ? 'bg-zinc-900/70 text-zinc-500' : 'bg-zinc-950' ?> px-3 py-2 text-sm outline-none focus:border-emerald-400">
                     <?php endif; ?>
                 </label>
+                <?php endforeach; ?>
+            </section>
             <?php endforeach; ?>
+            <section class="rounded-lg border border-zinc-800 p-3" aria-label="ข้อมูลอ้างอิงจากชุดเอกสาร">
+                <h2 class="mb-3 text-sm font-semibold text-emerald-300">ข้อมูลจากชุดเอกสาร (อ่านอย่างเดียว)</h2>
+                <label class="mb-3 block">
+                    <span class="text-sm text-zinc-300">ปีงบประมาณ พ.ศ. (กำหนดในหัวข้อ 1)</span>
+                    <input value="<?= h($fiscalYear) ?>" readonly class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-500">
+                </label>
             <label class="block">
                 <span class="text-sm text-zinc-300">จำนวนยา (รายการ) (ดึงอัตโนมัติ)</span>
                 <input value="<?= h($itemCount) ?>" readonly class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-100">
             </label>
+            </section>
             <button type="submit" name="action" value="save_document" class="app-primary-save rounded-md border border-emerald-500/60 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/10">บันทึกหัวข้อ 2 และอัปเดตเอกสาร</button>
         </form>
     </aside>

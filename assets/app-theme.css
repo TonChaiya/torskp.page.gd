@@ -44,7 +44,6 @@ body.app-themed {
     font-weight: 800;
     letter-spacing: -.02em;
 }
-
 .app-themed .app-brand-mark {
     display: grid;
     width: 2.25rem;
@@ -178,53 +177,78 @@ body.app-themed {
 .app-themed details > summary:hover { background: #f8fafc; }
 .app-themed .panel-indicator { color: #4f46e5 !important; background: #eef2ff; border-color: #c7d2fe !important; }
 
+/* Compact five-step workflow: one row on desktop, scrollable tabs on small screens. */
 .app-workflow {
     position: sticky;
     top: 0;
     z-index: 30;
     border-bottom: 1px solid rgba(226, 232, 240, .9);
-    background: rgba(246, 247, 251, .9);
+    background: rgba(246, 247, 251, .94);
     backdrop-filter: blur(14px);
 }
 .app-workflow-inner {
     display: flex;
     max-width: 100rem;
     margin: 0 auto;
-    padding: .65rem 1rem;
+    padding: .35rem 1rem;
     align-items: center;
-    gap: 1rem;
+    gap: .65rem;
 }
-.app-workflow-label { min-width: 7.5rem; color: #334155; font-size: .78rem; font-weight: 800; }
-.app-workflow-label small { display: block; color: #94a3b8; font-weight: 600; }
-.app-workflow-steps { display: grid; grid-template-columns: repeat(4, minmax(8.5rem, 1fr)); width: 100%; gap: .45rem; }
-.app-workflow-step {
+.app-workflow-label {
     display: flex;
-    min-height: 2.55rem;
-    align-items: center;
-    gap: .55rem;
-    border: 1px solid #e2e8f0;
-    border-radius: .75rem;
-    padding: .45rem .7rem;
-    color: #64748b;
-    background: rgba(255, 255, 255, .82);
-    font-size: .78rem;
-    font-weight: 700;
+    flex: 0 0 auto;
+    min-width: 0;
+    align-items: baseline;
+    gap: .35rem;
+    color: #334155;
+    font-size: .72rem;
+    font-weight: 800;
+    line-height: 1.25;
     white-space: nowrap;
 }
+.app-workflow-label small { display: inline; color: #64748b; font-size: .7rem; font-weight: 650; }
+.app-workflow-steps {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    width: 100%;
+    min-width: 0;
+    gap: .35rem;
+}
+.app-workflow-step {
+    display: flex;
+    min-height: 2.5rem;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    border: 1px solid #e2e8f0;
+    border-radius: .65rem;
+    padding: .35rem .5rem;
+    color: #64748b;
+    background: rgba(255, 255, 255, .85);
+    font-size: .73rem;
+    font-weight: 700;
+    line-height: 1.25;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color .16s, background .16s, color .16s, box-shadow .16s;
+}
 .app-workflow-step:hover { color: #4f46e5; border-color: #c7d2fe; background: #fff; }
+.app-workflow-step:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
 .app-workflow-number {
     display: grid;
-    width: 1.65rem;
-    height: 1.65rem;
+    width: 1.35rem;
+    height: 1.35rem;
     flex: 0 0 auto;
     place-items: center;
-    border-radius: .55rem;
+    border-radius: .4rem;
     color: #64748b;
     background: #f1f5f9;
+    font-size: .68rem;
 }
 .app-workflow-step.is-done { color: #0f766e; border-color: #99f6e4; background: #f0fdfa; }
 .app-workflow-step.is-done .app-workflow-number { color: #fff; background: #14b8a6; }
-.app-workflow-step.is-active { color: #fff; border-color: transparent; background: linear-gradient(115deg, #4f46e5, #7c3aed); box-shadow: 0 7px 18px rgba(79, 70, 229, .2); }
+.app-workflow-step.is-active { color: #fff; border-color: transparent; background: linear-gradient(115deg, #4f46e5, #7c3aed); box-shadow: 0 4px 10px rgba(79, 70, 229, .15); }
 .app-workflow-step.is-active .app-workflow-number { color: #4f46e5; background: #fff; }
 
 .app-themed .ui-progress-track { height: .45rem; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
@@ -257,6 +281,21 @@ body.app-themed {
     .app-themed aside.no-print { border-radius: 1.1rem !important; box-shadow: 0 14px 34px rgba(51, 65, 85, .09); }
 }
 
+/* Keep all five actions discoverable without shrinking text too much on tablets. */
+@media (max-width: 1100px) {
+    .app-workflow-inner { gap: .45rem; padding: .3rem .75rem; }
+    .app-workflow-steps {
+        display: flex;
+        flex: 1 1 auto;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        padding-bottom: .15rem;
+    }
+    .app-workflow-step { min-width: 7.5rem; flex: 0 0 auto; }
+}
+
 @media (max-width: 760px) {
     .app-themed .app-nav-inner { align-items: flex-start; }
     .app-themed .app-nav-actions { width: 100%; overflow-x: auto; padding-bottom: .2rem; scrollbar-width: none; -ms-overflow-style: none; }
@@ -264,12 +303,19 @@ body.app-themed {
     .app-themed .app-nav-link,
     .app-themed .app-user-chip,
     .app-themed .app-logout { white-space: nowrap; }
-    .app-workflow-inner { display: block; padding: .55rem .75rem; }
-    .app-workflow-label { display: none; }
-    .app-workflow-steps { display: flex; overflow-x: auto; padding-bottom: .15rem; scrollbar-width: none; }
-    .app-workflow-step { min-width: max-content; }
+    .app-workflow-inner { display: flex; gap: .45rem; padding: .3rem .6rem; }
+    .app-workflow-label { display: block; max-width: 6rem; line-height: 1.2; }
+    .app-workflow-label > span { display: none; }
+    .app-workflow-label small { display: block; font-size: .67rem; white-space: normal; }
+    .app-workflow-steps { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; padding-bottom: .12rem; }
+    .app-workflow-step { min-width: 7.6rem; min-height: 2.75rem; padding: .35rem .5rem; }
     .app-themed .app-action-bar { left: .5rem; right: .5rem; bottom: .5rem; gap: .5rem; }
     .app-themed .app-action-bar > button { flex: 1 1 9rem; }
+}
+
+@media (max-width: 380px) {
+    .app-workflow-label { max-width: 4.8rem; }
+    .app-workflow-label small { font-size: .63rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

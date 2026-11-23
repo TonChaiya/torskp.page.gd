@@ -557,10 +557,11 @@ if ((int) ($savedMeetingExtra['history_id'] ?? 0) !== $historyId || (count($item
 }
 $meetingTitle = field('meeting_title', savedValue($savedMeetingExtra, 'meeting_title', 'รายงานการประชุมคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง'));
 $purposeLine = field('purpose_line', $savedPurposeLine);
-$fiscalLine = field('fiscal_line', 'ประจำปีงบประมาณ พ.ศ. ' . thaiDigits((string) ($activeCase['fiscal_year'] ?? '')));
-if (!$activeCase || trim((string) ($activeCase['fiscal_year'] ?? '')) === '') {
-    $fiscalLine = field('fiscal_line', savedValue($savedMeetingExtra, 'fiscal_line', 'ประจำปีงบประมาณ พ.ศ. ........'));
-}
+// ปีงบประมาณใช้ข้อมูลกลางของชุดเอกสาร; ไม่เปลี่ยนปีของวันที่ประชุม
+$caseFiscalYear = trim((string) ($activeCase['fiscal_year'] ?? ''));
+$fiscalLine = $caseFiscalYear !== ''
+    ? 'ประจำปีงบประมาณ พ.ศ. ' . thaiDigits($caseFiscalYear)
+    : field('fiscal_line', savedValue($savedMeetingExtra, 'fiscal_line', 'ประจำปีงบประมาณ พ.ศ. ........'));
 $meetingDate = field('meeting_date', savedValue($savedMeetingExtra, 'meeting_date', savedValue($savedInvitationExtra, 'meeting_date', '๒๔ เดือน กุมภาพันธ์ พ.ศ. ๒๕๖๘')));
 $meetingTime = field('meeting_time', savedValue($savedMeetingExtra, 'meeting_time', savedValue($savedInvitationExtra, 'meeting_time', '๐๙.๓๐ น.')));
 $meetingPlace = field('meeting_place', savedValue($savedMeetingExtra, 'meeting_place', 'ห้องประชุมศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล อำเภอสันกำแพง จังหวัดเชียงใหม่'));
@@ -735,10 +736,23 @@ foreach ($speeches as $speech) {
 
 $offerTotal = array_sum(array_map('meetingStoredTotal', $items));
 $meetingProjectName = 'จัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย จำนวน ' . $itemCountText . ' รายการ';
-// The new step 4 is the authoritative reference for both annex headers.
-// Fall back to the legacy meeting-report fields for older projects only.
-$reportMemoNo = field('report_memo_no', (string) ($savedResultDocument['memo_no_suffix'] ?? '') !== '' ? (string) $savedResultDocument['memo_no_suffix'] : savedValue($savedMeetingExtra, 'report_memo_no', ''));
-$reportDocDate = field('report_doc_date', (string) ($savedResultDocument['doc_date'] ?? '') !== '' ? (string) $savedResultDocument['doc_date'] : savedValue($savedMeetingExtra, 'report_doc_date', ''));
+// Annexes 1 and 2 start with the number/date saved in step 4.
+// If a user has explicitly changed either field in this document, keep that override.
+// Earlier documents without override flags preserve a differing saved value.
+$resultMemoNo = trim((string) ($savedResultDocument['memo_no_suffix'] ?? ''));
+$resultDocDate = trim((string) ($savedResultDocument['doc_date'] ?? ''));
+$savedReportMemoNo = savedValue($savedMeetingExtra, 'report_memo_no');
+$savedReportDocDate = savedValue($savedMeetingExtra, 'report_doc_date');
+$memoNoWasOverridden = array_key_exists('report_memo_no_override', $savedMeetingExtra)
+    ? (bool) $savedMeetingExtra['report_memo_no_override']
+    : ($savedReportMemoNo !== '' && $resultMemoNo !== '' && thaiDigits($savedReportMemoNo) !== thaiDigits($resultMemoNo));
+$docDateWasOverridden = array_key_exists('report_doc_date_override', $savedMeetingExtra)
+    ? (bool) $savedMeetingExtra['report_doc_date_override']
+    : ($savedReportDocDate !== '' && $resultDocDate !== '' && thaiDigits($savedReportDocDate) !== thaiDigits($resultDocDate));
+$reportMemoNo = field('report_memo_no', $memoNoWasOverridden ? $savedReportMemoNo : ($resultMemoNo !== '' ? $resultMemoNo : $savedReportMemoNo));
+$reportDocDate = field('report_doc_date', $docDateWasOverridden ? $savedReportDocDate : ($resultDocDate !== '' ? $resultDocDate : $savedReportDocDate));
+$reportMemoNoOverride = $reportMemoNo !== thaiDigits($resultMemoNo);
+$reportDocDateOverride = $reportDocDate !== thaiDigits($resultDocDate);
 $priceReferenceText = 'อ้างอิงราคากลางตามพระราชบัญญัติจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ.๒๕๖๐ มาตรา ๔ (๒) ราคาที่ได้มาจากฐานข้อมูลราคาอ้างอิงของพัสดุที่กรมบัญชีกลางจัดทำ กำหนดราคากลางไว้ในประกาศคณะกรรมการพัฒนาระบบยาแห่งชาติ เรื่องกำหนดราคากลางยาลงวันที่ ๒๕ สิงหาคม ๒๕๖๘ (ฉบับลงราชกิจจานุเบกษา)';
 $meetingPriceWarnings = [];
 foreach ($committee as $i => $person) {
@@ -768,6 +782,8 @@ if (($_POST['action'] ?? '') === 'save_document') {
             'meeting_place' => $meetingPlace,
             'report_memo_no' => $reportMemoNo,
             'report_doc_date' => $reportDocDate,
+            'report_memo_no_override' => $reportMemoNoOverride,
+            'report_doc_date_override' => $reportDocDateOverride,
             'open_time' => $openTime,
             'close_time' => $closeTime,
             'absent_text' => $absentText,
@@ -811,9 +827,9 @@ if (($_POST['action'] ?? '') === 'word') {
 }
 
 $headerFields = [
+    'fiscal_line' => ['label' => 'ปีงบประมาณ (จากหัวข้อ 1)', 'value' => $fiscalLine],
     'meeting_title' => ['label' => 'ชื่อรายงาน', 'value' => $meetingTitle],
     'purpose_line' => ['label' => 'บรรทัดวัตถุประสงค์/จำนวนรายการ', 'value' => $purposeLine],
-    'fiscal_line' => ['label' => 'ปีงบประมาณ', 'value' => $fiscalLine],
 ];
 $timeFields = [
     'meeting_date' => ['label' => 'วันที่ประชุม', 'value' => $meetingDate],
@@ -1054,26 +1070,27 @@ $timeFields = [
             <input type="hidden" name="history_id" value="<?= (int) $historyId ?>">
             <input type="hidden" name="template_revision" value="<?= h($activeTemplateRevision) ?>">
             <section class="rounded-md border border-zinc-800">
-                <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="false">
-                    <span>2. หัวเอกสาร</span>
-                    <span class="accordion-icon text-zinc-400">เปิด</span>
+                <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="true">
+                    <span>2. หัวเอกสารและปีงบประมาณ</span>
+                    <span class="accordion-icon text-zinc-400">ปิด</span>
                 </button>
-                <div class="accordion-panel hidden border-t border-zinc-800 p-3">
+                <div class="accordion-panel border-t border-zinc-800 p-3">
+                    <p class="mb-3 text-xs text-zinc-500">ปีงบประมาณดึงจากชุดเอกสารหัวข้อ 1 ส่วนวันที่ประชุมแก้ไขได้แยกต่างหาก</p>
                     <?php foreach ($headerFields as $name => $field): ?>
                         <label class="mb-3 block">
                             <span class="text-sm text-zinc-300"><?= h($field['label']) ?></span>
-                            <input name="<?= h($name) ?>" value="<?= h($field['value']) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                            <input name="<?= h($name) ?>" value="<?= h($field['value']) ?>" <?= $name === 'fiscal_line' && $caseFiscalYear !== '' ? 'readonly aria-readonly="true" title="แก้ไขปีงบประมาณที่หัวข้อ 1"' : '' ?> class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
                         </label>
                     <?php endforeach; ?>
                 </div>
             </section>
 
             <section class="rounded-md border border-zinc-800">
-                <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="false">
-                    <span>3. วัน เวลา และสถานที่ประชุม</span>
-                    <span class="accordion-icon text-zinc-400">เปิด</span>
+                <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="true">
+                    <span>3. วัน เวลา สถานที่ และหนังสืออ้างอิง</span>
+                    <span class="accordion-icon text-zinc-400">ปิด</span>
                 </button>
-                <div class="accordion-panel hidden border-t border-zinc-800 p-3">
+                <div class="accordion-panel border-t border-zinc-800 p-3">
                     <div class="grid gap-3 sm:grid-cols-2">
                         <?php foreach ($timeFields as $name => $field): ?>
                             <label class="block">
@@ -1092,7 +1109,8 @@ $timeFields = [
                     </label>
                     <label class="mt-3 block">
                         <span class="text-sm text-zinc-300">วันที่หนังสือรายงานผล (ใช้ในหัวเอกสารแนบท้าย)</span>
-                        <input name="report_doc_date" value="<?= h($reportDocDate) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 sm:text-sm">
+                        <input name="report_doc_date" value="<?= h($reportDocDate) ?>" data-thai-date-picker="1" readonly aria-readonly="true" placeholder="กดเพื่อเลือกวันที่" class="mt-1 w-full cursor-pointer rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 sm:text-sm">
+                        <span class="mt-1 block text-xs text-zinc-500">ดึงวันที่จากหัวข้อ 4 อัตโนมัติ กดช่องวันที่หรือปุ่มเลือกวันที่เพื่อแก้ไข</span>
                     </label>
                     <label class="mt-3 block">
                         <span class="text-sm text-zinc-300">ผู้ไม่เข้าประชุม</span>
@@ -1103,7 +1121,7 @@ $timeFields = [
 
             <section class="rounded-md border border-zinc-800">
                 <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="false">
-                    <span>4. รายชื่อคณะกรรมการ</span>
+                    <span>4. รายชื่อคณะกรรมการ (ตรวจสอบ/แก้ไข)</span>
                     <span class="accordion-icon text-zinc-400">เปิด</span>
                 </button>
                 <div class="accordion-panel hidden border-t border-zinc-800 p-3">
@@ -1307,7 +1325,7 @@ $timeFields = [
         <article class="report-page annex-page">
             <?php if ($hasSelectedHistory): ?>
             <div class="doc-title">
-                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?> ลงวันที่ <?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></div>
+                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-meeting-annex="report_memo_no"><?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?></span> ลงวันที่ <span data-meeting-annex="report_doc_date"><?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></span></div>
                 <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
                 <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
             </div>
@@ -1339,7 +1357,7 @@ $timeFields = [
         <article class="report-page annex-page">
             <?php if ($hasSelectedHistory): ?>
             <div class="doc-title">
-                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?> ลงวันที่ <?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></div>
+                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-meeting-annex="report_memo_no"><?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?></span> ลงวันที่ <span data-meeting-annex="report_doc_date"><?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></span></div>
                 <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
                 <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
             </div>
@@ -1389,6 +1407,101 @@ function bindThaiDigitInputs(scope = document) {
 }
 
 bindThaiDigitInputs();
+
+// Keep both annex headers in sync with the editable number/date fields.
+for (const [fieldName, blankText] of [
+    ['report_memo_no', '.................'],
+    ['report_doc_date', '........................'],
+]) {
+    const input = document.querySelector(`[name="${fieldName}"]`);
+    if (!input) continue;
+    const updateAnnexHeaders = () => {
+        const value = thaiDigits(input.value.trim()) || blankText;
+        document.querySelectorAll(`[data-meeting-annex="${fieldName}"]`).forEach((node) => {
+            node.textContent = value;
+        });
+    };
+    input.addEventListener('input', updateAnnexHeaders);
+    input.addEventListener('change', updateAnnexHeaders);
+    updateAnnexHeaders();
+}
+
+// Use the same native calendar popup as the other document pages; no manual date typing.
+const meetingThaiMonthNames = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+];
+const meetingThaiMonthShortNames = [
+    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+];
+function parseMeetingThaiDate(value) {
+    const normalized = String(value).replace(/[๐-๙]/g, (digit) => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(digit)))
+        .replace(/^วันที่\s*/, '').trim().replace(/\s+/g, ' ');
+    const matched = normalized.match(/^(\d{1,2})\s+(?:เดือน\s+)?([^\s]+)\s+(?:พ\.\s*ศ\.\s*)?(\d{4})$/);
+    if (!matched) return '';
+    let monthIndex = meetingThaiMonthNames.indexOf(matched[2]);
+    if (monthIndex < 0) monthIndex = meetingThaiMonthShortNames.indexOf(matched[2]);
+    let year = Number(matched[3]);
+    if (year >= 2400) year -= 543;
+    const day = Number(matched[1]);
+    if (monthIndex < 0 || year < 1900 || day < 1 || day > 31) return '';
+    const date = new Date(Date.UTC(year, monthIndex, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== monthIndex || date.getUTCDate() !== day) return '';
+    return `${String(year).padStart(4, '0')}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+function formatMeetingThaiDate(value) {
+    const matched = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!matched) return '';
+    const year = Number(matched[1]);
+    const month = Number(matched[2]);
+    const day = Number(matched[3]);
+    if (!year || month < 1 || month > 12 || day < 1 || day > 31) return '';
+    return thaiDigits(`${day} ${meetingThaiMonthNames[month - 1]} ${year + 543}`);
+}
+function setupMeetingThaiDatePicker(input) {
+    if (input.dataset.datePickerBound === '1') return;
+    input.dataset.datePickerBound = '1';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'relative mt-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2';
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+    input.classList.remove('mt-1');
+
+    const picker = document.createElement('input');
+    picker.type = 'date';
+    picker.value = parseMeetingThaiDate(input.value);
+    picker.className = 'absolute h-px w-px opacity-0 pointer-events-none';
+    picker.tabIndex = -1;
+    picker.setAttribute('aria-label', 'ปฏิทินวันที่หนังสือรายงานผล');
+    wrapper.appendChild(picker);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:border-emerald-400';
+    button.textContent = 'เลือกวันที่';
+    wrapper.appendChild(button);
+
+    const openPicker = () => {
+        picker.value = parseMeetingThaiDate(input.value);
+        try {
+            if (typeof picker.showPicker === 'function') picker.showPicker();
+            else { picker.focus(); picker.click(); }
+        } catch (error) {
+            picker.focus();
+            picker.click();
+        }
+    };
+    picker.addEventListener('change', () => {
+        input.value = formatMeetingThaiDate(picker.value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    button.addEventListener('click', openPicker);
+    input.addEventListener('click', openPicker);
+    input.addEventListener('focus', openPicker);
+}
+document.querySelectorAll('[data-thai-date-picker]').forEach(setupMeetingThaiDatePicker);
 
 document.querySelectorAll('.accordion-toggle').forEach((button) => {
     button.addEventListener('click', () => {
