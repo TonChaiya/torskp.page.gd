@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 const DB_HOST = 'localhost';
-const DB_NAME = 'tor_skp';
+const DB_NAME = 'if0_40414720_tor_skp';
 const DB_USER = 'root';
 const DB_PASS = '';
 

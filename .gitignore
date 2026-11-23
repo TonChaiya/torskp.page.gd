@@ -1,2 +1,27 @@
+
+# Local configuration
 /config/local.php
-/vendor
+
+# Composer dependencies
+/vendor/
+
+# Word export diagnostics
+/word-export-diagnostics/
+
+# Temporary QA tools
+/tools/check_invitation_export.php
+
+# Temporary files and backups
+*.tmp
+*.bak
+*.log
+~$*.docx
+
+# Environment files
+.env
+.env.local
+
+# Editor and operating system
+.vscode/
+.DS_Store
+Thumbs.db

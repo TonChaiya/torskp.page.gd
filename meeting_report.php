@@ -484,6 +484,7 @@ $savedDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'mee
 $savedMeetingExtra = is_array($savedDocument['extra'] ?? null) ? $savedDocument['extra'] : [];
 $savedInvitationDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'committee_scope_invitation') : null;
 $savedInvitationExtra = is_array($savedInvitationDocument['extra'] ?? null) ? $savedInvitationDocument['extra'] : [];
+$savedResultDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'committee_scope_result_memo') : null;
 $savedTorDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'tor_company_purchase') : null;
 $savedTorExtra = is_array($savedTorDocument['extra'] ?? null) ? $savedTorDocument['extra'] : [];
 $historyId = (int) rawField('history_id', (string) ($savedMeetingExtra['history_id'] ?? $savedTorExtra['history_id'] ?? '0'));
@@ -532,6 +533,7 @@ if ($caseId <= 0 && $history && !empty($history['case_id'])) {
     $savedMeetingExtra = is_array($savedDocument['extra'] ?? null) ? $savedDocument['extra'] : [];
     $savedInvitationDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'committee_scope_invitation') : null;
     $savedInvitationExtra = is_array($savedInvitationDocument['extra'] ?? null) ? $savedInvitationDocument['extra'] : [];
+    $savedResultDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'committee_scope_result_memo') : null;
     $savedTorDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'tor_company_purchase') : null;
     $savedTorExtra = is_array($savedTorDocument['extra'] ?? null) ? $savedTorDocument['extra'] : [];
 }
@@ -733,8 +735,10 @@ foreach ($speeches as $speech) {
 
 $offerTotal = array_sum(array_map('meetingStoredTotal', $items));
 $meetingProjectName = 'จัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย จำนวน ' . $itemCountText . ' รายการ';
-$reportMemoNo = field('report_memo_no', savedValue($savedMeetingExtra, 'report_memo_no', ''));
-$reportDocDate = field('report_doc_date', savedValue($savedMeetingExtra, 'report_doc_date', ''));
+// The new step 4 is the authoritative reference for both annex headers.
+// Fall back to the legacy meeting-report fields for older projects only.
+$reportMemoNo = field('report_memo_no', (string) ($savedResultDocument['memo_no_suffix'] ?? '') !== '' ? (string) $savedResultDocument['memo_no_suffix'] : savedValue($savedMeetingExtra, 'report_memo_no', ''));
+$reportDocDate = field('report_doc_date', (string) ($savedResultDocument['doc_date'] ?? '') !== '' ? (string) $savedResultDocument['doc_date'] : savedValue($savedMeetingExtra, 'report_doc_date', ''));
 $priceReferenceText = 'อ้างอิงราคากลางตามพระราชบัญญัติจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ.๒๕๖๐ มาตรา ๔ (๒) ราคาที่ได้มาจากฐานข้อมูลราคาอ้างอิงของพัสดุที่กรมบัญชีกลางจัดทำ กำหนดราคากลางไว้ในประกาศคณะกรรมการพัฒนาระบบยาแห่งชาติ เรื่องกำหนดราคากลางยาลงวันที่ ๒๕ สิงหาคม ๒๕๖๘ (ฉบับลงราชกิจจานุเบกษา)';
 $meetingPriceWarnings = [];
 foreach ($committee as $i => $person) {

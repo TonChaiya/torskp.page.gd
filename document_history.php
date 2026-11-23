@@ -68,7 +68,7 @@ if ($historySearch !== '') {
             <div>
                 <p class="text-sm font-semibold text-emerald-300">ชุดเอกสารทั้งหมด</p>
                 <h1 class="mt-1 text-3xl font-bold">ประวัติการออกเอกสาร</h1>
-                <p class="mt-2 text-sm text-zinc-400">ค้นหา เปิดแก้ไข และตรวจความครบถ้วนของเอกสารทั้ง 4 หัวข้อ</p>
+                <p class="mt-2 text-sm text-zinc-400">ค้นหา เปิดแก้ไข และตรวจความครบถ้วนของเอกสารทั้ง 5 หัวข้อ</p>
             </div>
             <a href="principle_approval_memo.php" class="rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">+ สร้างชุดเอกสารใหม่</a>
         </div>
@@ -103,7 +103,8 @@ if ($historySearch !== '') {
                     'principle_approval' => ['label' => 'หัวข้อ 1', 'available' => $completion['principle_approval']],
                     'committee_scope_invitation' => ['label' => 'หัวข้อ 2', 'available' => $completion['committee_scope_invitation']],
                     'tor_company_purchase' => ['label' => 'หัวข้อ 3', 'available' => $completion['tor_company_purchase']],
-                    'meeting_report' => ['label' => 'หัวข้อ 4', 'available' => $completion['meeting_report']],
+                    'committee_scope_result_memo' => ['label' => 'หัวข้อ 4', 'available' => $completion['committee_scope_result_memo']],
+                    'meeting_report' => ['label' => 'หัวข้อ 5', 'available' => $completion['meeting_report']],
                 ];
                 $memoNo = trim((string) ($case['principle_memo_no_suffix'] ?? ''));
                 $docDate = trim((string) ($case['principle_doc_date'] ?? ''));
@@ -115,15 +116,16 @@ if ($historySearch !== '') {
                             <?= h($caseLabel) ?> ซื้อยา <?= h((string) $itemsCount) ?> รายการ
                         </div>
                         <div class="mt-2 flex items-center gap-3">
-                            <div class="ui-progress-track max-w-52 flex-1"><div class="ui-progress-bar" style="width: <?= $completedCount * 25 ?>%"></div></div>
-                            <div class="text-xs font-semibold <?= $completedCount === 4 ? 'text-emerald-300' : 'text-indigo-600' ?>">ครบ <?= h((string) $completedCount) ?>/4</div>
+                            <div class="ui-progress-track max-w-52 flex-1"><div class="ui-progress-bar" style="width: <?= $completedCount * 20 ?>%"></div></div>
+                            <div class="text-xs font-semibold <?= $completedCount === 5 ? 'text-emerald-300' : 'text-indigo-600' ?>">ครบ <?= h((string) $completedCount) ?>/5</div>
                         </div>
                     </div>
                     <div class="flex flex-nowrap gap-2 overflow-x-auto text-sm">
                         <a href="principle_approval_memo.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['principle_approval'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">1 อนุมัติ</a>
                         <a href="committee_scope_invitation.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['committee_scope_invitation'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">2 เชิญกรรมการ</a>
                         <a href="tor_company_purchase.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['tor_company_purchase'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">3 TOR</a>
-                        <a href="meeting_report.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['meeting_report'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">4 ประชุม</a>
+                        <a href="committee_scope_result_memo.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['committee_scope_result_memo'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">4 รายงานผล</a>
+                        <a href="meeting_report.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['meeting_report'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">5 ประชุม</a>
                         <button
                             type="button"
                             class="whitespace-nowrap rounded-md border border-red-500/60 px-3 py-2 text-red-200 hover:bg-red-500/10"

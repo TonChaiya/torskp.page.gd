@@ -15,6 +15,7 @@ $workflowSteps = [
     ['page' => 'principle_approval_memo.php', 'key' => 'principle_approval', 'label' => 'อนุมัติหลักการ'],
     ['page' => 'committee_scope_invitation.php', 'key' => 'committee_scope_invitation', 'label' => 'เชิญกรรมการ'],
     ['page' => 'tor_company_purchase.php', 'key' => 'tor_company_purchase', 'label' => 'จัดทำ TOR'],
+    ['page' => 'committee_scope_result_memo.php', 'key' => 'committee_scope_result_memo', 'label' => 'รายงานผล'],
     ['page' => 'meeting_report.php', 'key' => 'meeting_report', 'label' => 'รายงานประชุม'],
 ];
 ?>

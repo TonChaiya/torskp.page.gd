@@ -19,6 +19,7 @@ $workflows = [
             ['title' => 'บันทึกข้อความ ขออนุมัติในหลักการ', 'href' => 'principle_approval_memo.php'],
             ['title' => 'บันทึกข้อความ แจ้งคำสั่งและเชิญประชุมแต่งตั้งคณะกรรมการร่างขอบเขต และวาระการประชุม', 'href' => 'committee_scope_invitation.php'],
             ['title' => 'เอกสาร TOR', 'href' => 'tor_company_purchase.php', 'note' => 'ออกเอกสาร TOR จัดซื้อผ่านบริษัท'],
+            ['title' => 'บันทึกข้อความ รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะ', 'href' => 'committee_scope_result_memo.php'],
             ['title' => 'รายงานการประชุม', 'href' => 'meeting_report.php'],
         ],
     ],
@@ -50,7 +51,7 @@ $workflows = [
             <div>
                 <p class="text-sm font-semibold text-emerald-300">ระบบออกเอกสารจัดซื้อ</p>
                 <h1 class="mt-1 text-3xl font-bold">เริ่มจัดทำเอกสาร TOR</h1>
-                <p class="mt-2 max-w-2xl text-sm text-zinc-400">เลือกประเภทการจัดซื้อ แล้วดำเนินการตามหัวข้อที่ 1–4 ข้อมูลของแต่ละชุดจะเชื่อมถึงกันอัตโนมัติ</p>
+                <p class="mt-2 max-w-2xl text-sm text-zinc-400">เลือกประเภทการจัดซื้อ แล้วดำเนินการตามหัวข้อที่ 1–5 ข้อมูลของแต่ละชุดจะเชื่อมถึงกันอัตโนมัติ</p>
             </div>
             <a href="document_history.php" class="rounded-md border border-zinc-700 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-indigo-400">เปิดชุดเอกสารเดิม</a>
         </div>
@@ -70,7 +71,7 @@ $workflows = [
                             <?= $workflowIndex + 1 ?>
                         </div>
                         <button type="button" class="workflow-toggle flex flex-1 items-center justify-between gap-3 text-left font-semibold <?= $workflow['enabled'] ? 'text-emerald-100' : 'text-zinc-400' ?>" aria-expanded="<?= $workflow['enabled'] ? 'true' : 'false' ?>">
-                            <span><span class="block"><?= h($workflow['title']) ?></span><span class="mt-0.5 block text-xs font-normal text-zinc-500"><?= $workflow['enabled'] ? 'พร้อมจัดทำเอกสาร 4 ขั้นตอน' : 'ยังไม่เปิดใช้งาน' ?></span></span>
+                            <span><span class="block"><?= h($workflow['title']) ?></span><span class="mt-0.5 block text-xs font-normal text-zinc-500"><?= $workflow['enabled'] ? 'พร้อมจัดทำเอกสาร 5 ขั้นตอน' : 'ยังไม่เปิดใช้งาน' ?></span></span>
                             <span class="workflow-icon rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-zinc-500"><?= $workflow['enabled'] ? 'ซ่อน' : 'ดู' ?></span>
                         </button>
                         <?php if (!$workflow['enabled']): ?>

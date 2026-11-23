@@ -70,6 +70,7 @@ function procurementCaseCompletion(int $caseId): array
         'principle_approval' => isset($documents['principle_approval']),
         'committee_scope_invitation' => isset($documents['committee_scope_invitation']),
         'tor_company_purchase' => isset($documents['tor_company_purchase']),
+        'committee_scope_result_memo' => isset($documents['committee_scope_result_memo']),
         'meeting_report' => isset($documents['meeting_report']),
     ];
 }
@@ -200,6 +201,7 @@ function deleteProcurementDocuments(int $caseId, array $documentTypes): void
         'principle_approval',
         'committee_scope_invitation',
         'tor_company_purchase',
+        'committee_scope_result_memo',
         'meeting_report',
     ];
     $documentTypes = array_values(array_intersect($allowedTypes, array_map('strval', $documentTypes)));

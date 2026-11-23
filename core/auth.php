@@ -143,13 +143,18 @@ function loginThrottleKey(string $username): string
     return hash('sha256', mb_strtolower(trim($username), 'UTF-8'));
 }
 
+
 function loginIsLocked(string $username): bool
 {
     $stmt = db()->prepare('SELECT locked_until FROM login_attempts WHERE identifier_hash = ? AND ip_address = ?');
     $stmt->execute([loginThrottleKey($username), clientIp()]);
     $lockedUntil = $stmt->fetchColumn();
-    return $lockedUntil !== false && $lockedUntil !== null && strtotime((string) $lockedUntil) > time();
+
+    return $lockedUntil !== false
+        && $lockedUntil !== null
+        && strtotime((string) $lockedUntil) > time();
 }
+
 
 function registerLoginFailure(string $username): void
 {
