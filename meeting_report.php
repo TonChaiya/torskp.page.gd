@@ -5,6 +5,9 @@ require __DIR__ . '/core/procurement_case.php';
 require __DIR__ . '/core/word_export_lib.php';
 require __DIR__ . '/core/auth.php';
 requireLogin();
+// Always load the saved document state anew after a POST/redirect.
+header('Cache-Control: private, no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
 
 function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
 function thaiDigits($value): string
@@ -18,6 +21,81 @@ function arabicDigits($value): string
 function rawField(string $key, string $default = ''): string { return trim((string) ($_POST[$key] ?? $_GET[$key] ?? $default)); }
 function field(string $key, string $default = ''): string { return thaiDigits(trim((string) ($_POST[$key] ?? $_GET[$key] ?? $default))); }
 function money(float $value): string { return thaiDigits(number_format($value, 2)); }
+/** A price can have three decimals, or more where an existing TOR price needs it. */
+function meetingPriceText($value): string
+{
+    $value = (float) $value;
+    $formatted = number_format($value, 5, '.', ',');
+    [$whole, $fraction] = explode('.', $formatted);
+    $fraction = rtrim($fraction, '0');
+    return thaiDigits($whole . '.' . str_pad($fraction, 3, '0'));
+}
+function meetingStoredTotal(array $item): float
+{
+    // TOR persists the line total with the selected unit/packaging convention.
+    if (isset($item['offer_total']) && is_numeric($item['offer_total'])) {
+        return round((float) $item['offer_total'], 2);
+    }
+    return round(meetingItemOfferTotal($item), 2);
+}
+function meetingBahtText(float $value): string
+{
+    $rounded = number_format(max(0, $value), 2, '.', '');
+    [$baht, $satang] = explode('.', $rounded);
+    $words = ['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+    $units = ['','สิบ','ร้อย','พัน','หมื่น','แสน'];
+    $readSix = static function (string $digits) use ($words, $units): string {
+        $digits = ltrim($digits, '0');
+        if ($digits === '') return '';
+        $out = '';
+        $length = strlen($digits);
+        for ($i = 0; $i < $length; $i++) {
+            $n = (int) $digits[$i];
+            $position = $length - $i - 1;
+            if ($n === 0) continue;
+            if ($position === 1 && $n === 1) $out .= 'สิบ';
+            elseif ($position === 1 && $n === 2) $out .= 'ยี่สิบ';
+            elseif ($position === 0 && $n === 1 && $length > 1) $out .= 'เอ็ด';
+            else $out .= $words[$n] . $units[$position];
+        }
+        return $out;
+    };
+    $readNumber = static function (string $digits) use ($readSix): string {
+        $digits = ltrim($digits, '0');
+        if ($digits === '') return 'ศูนย์';
+        $parts = [];
+        while ($digits !== '') {
+            $parts[] = substr($digits, -6);
+            $digits = substr($digits, 0, max(0, strlen($digits) - 6));
+        }
+        $result = '';
+        for ($i = count($parts) - 1; $i >= 0; $i--) {
+            $part = $readSix($parts[$i]);
+            if ($part === '') continue;
+            $result .= $part . str_repeat('ล้าน', $i);
+        }
+        return $result;
+    };
+    return $readNumber($baht) . 'บาท' . ((int) $satang === 0 ? 'ถ้วน' : $readNumber($satang) . 'สตางค์');
+}
+function meetingItemDisplayQuantity(array $item): float
+{
+    $requested = (float) ($item['requested_quantity'] ?? 0);
+    if ($requested > 0) return $requested;
+    if (meetingItemHasPackage($item) && (float) ($item['package_count'] ?? 0) > 0) {
+        return (float) $item['package_count'] * (float) $item['package_size'];
+    }
+    return (float) ($item['quantity'] ?? 0);
+}
+function meetingItemDisplayUnit(array $item): string
+{
+    return trim((string) ($item['unit'] ?? ''));
+}
+function meetingItemSpecification(array $item): string
+{
+    return trim((string) ($item['specification'] ?? ''));
+}
+
 function quantityText($value): string
 {
     $number = (float) $value;
@@ -150,7 +228,8 @@ function itemSnapshot(array $items): array
             'unit' => (string) ($item['unit'] ?? ''),
             'reference_price' => (float) ($item['reference_price'] ?? 0),
             'offer_price' => (float) ($item['offer_price'] ?? 0),
-            'offer_total' => meetingItemOfferTotal($item),
+            'offer_total' => meetingStoredTotal($item),
+            'specification' => (string) ($item['specification'] ?? ''),
         ];
     }
     return $snapshot;
@@ -374,14 +453,21 @@ function ensureTorHistoriesTable(): void
     requireDatabaseTables(['tor_histories']);
 }
 
-function splitCommittee(string $text, int $index): array
+function splitCommittee($text, int $index): array
 {
     $defaults = [
-        ['name' => 'นางสาวชุติภัทร เงินอินต๊ะ', 'position' => 'เภสัชกรปฏิบัติการ', 'role' => 'ประธานกรรมการ'],
-        ['name' => 'นางสาวพรไพลิน แก้วแสนขาว', 'position' => 'เภสัชกรปฏิบัติการ', 'role' => 'กรรมการ'],
-        ['name' => 'นายไชยา บุญทานุช', 'position' => 'เจ้าพนักงานเภสัชกรรมปฏิบัติงาน', 'role' => 'กรรมการ'],
+        ['name' => '', 'position' => '', 'role' => 'ประธานกรรมการ'],
+        ['name' => '', 'position' => '', 'role' => 'กรรมการ'],
+        ['name' => '', 'position' => '', 'role' => 'กรรมการ'],
     ];
-    $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $text) ?: []), fn($line) => $line !== ''));
+    if (is_array($text)) {
+        return [
+            'name' => trim((string) ($text['name'] ?? $text[0] ?? '')),
+            'position' => trim((string) ($text['position'] ?? $text[1] ?? '')),
+            'role' => trim((string) ($text['role'] ?? $text[2] ?? $defaults[$index]['role'])),
+        ];
+    }
+    $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) $text) ?: []), fn($line) => $line !== ''));
     return [
         'name' => $lines[0] ?? $defaults[$index]['name'],
         'position' => $lines[1] ?? $defaults[$index]['position'],
@@ -433,6 +519,12 @@ try {
 } catch (Throwable $e) {
     $error = 'ยังอ่านประวัติ TOR ไม่ได้ กรุณาออกเอกสาร TOR อย่างน้อย 1 ครั้ง หรือสร้างฐานข้อมูลด้วย schema.sql';
 }
+// Do not combine a TOR history linked to a different procurement project.
+if ($caseId > 0 && $history && (int) ($history['case_id'] ?? 0) > 0 && (int) $history['case_id'] !== $caseId) {
+    $error = 'ประวัติ TOR ที่เลือกไม่ตรงกับโครงการ กรุณาเลือกประวัติของโครงการนี้';
+    $history = null;
+    $historyId = 0;
+}
 if ($caseId <= 0 && $history && !empty($history['case_id'])) {
     $caseId = (int) $history['case_id'];
     $activeCase = procurementCase($caseId);
@@ -445,12 +537,15 @@ if ($caseId <= 0 && $history && !empty($history['case_id'])) {
 }
 
 $committeeRaw = $history ? (json_decode((string) $history['committee_json'], true) ?: []) : [];
+if (!$committeeRaw && $activeCase) {
+    $committeeRaw = $activeCase['committee'] ?? [];
+}
 $items = $history ? (json_decode((string) $history['items_json'], true) ?: []) : [];
 $hasSelectedHistory = $historyId > 0 && $history !== null;
 $committee = [
-    splitCommittee((string) ($committeeRaw[0] ?? ''), 0),
-    splitCommittee((string) ($committeeRaw[1] ?? ''), 1),
-    splitCommittee((string) ($committeeRaw[2] ?? ''), 2),
+    splitCommittee($committeeRaw[0] ?? '', 0),
+    splitCommittee($committeeRaw[1] ?? '', 1),
+    splitCommittee($committeeRaw[2] ?? '', 2),
 ];
 
 $defaultPurposeLine = 'เพื่อจัดหาการจัดซื้อยา จำนวน ' . thaiDigits((string) count($items)) . ' รายการ';
@@ -458,16 +553,26 @@ $savedPurposeLine = savedValue($savedMeetingExtra, 'purpose_line', $defaultPurpo
 if ((int) ($savedMeetingExtra['history_id'] ?? 0) !== $historyId || (count($items) > 0 && str_contains($savedPurposeLine, 'จำนวน ๐ รายการ'))) {
     $savedPurposeLine = $defaultPurposeLine;
 }
-$meetingTitle = field('meeting_title', savedValue($savedMeetingExtra, 'meeting_title', 'รายงานการประชุมคณะกรรมการกำหนดร่างขอบเขตและกำหนดราคากลาง'));
+$meetingTitle = field('meeting_title', savedValue($savedMeetingExtra, 'meeting_title', 'รายงานการประชุมคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง'));
 $purposeLine = field('purpose_line', $savedPurposeLine);
-$fiscalLine = field('fiscal_line', savedValue($savedMeetingExtra, 'fiscal_line', 'ประจำปีงบประมาณ พ.ศ. ๒๕๖๙'));
+$fiscalLine = field('fiscal_line', 'ประจำปีงบประมาณ พ.ศ. ' . thaiDigits((string) ($activeCase['fiscal_year'] ?? '')));
+if (!$activeCase || trim((string) ($activeCase['fiscal_year'] ?? '')) === '') {
+    $fiscalLine = field('fiscal_line', savedValue($savedMeetingExtra, 'fiscal_line', 'ประจำปีงบประมาณ พ.ศ. ........'));
+}
 $meetingDate = field('meeting_date', savedValue($savedMeetingExtra, 'meeting_date', savedValue($savedInvitationExtra, 'meeting_date', '๒๔ เดือน กุมภาพันธ์ พ.ศ. ๒๕๖๘')));
 $meetingTime = field('meeting_time', savedValue($savedMeetingExtra, 'meeting_time', savedValue($savedInvitationExtra, 'meeting_time', '๐๙.๓๐ น.')));
-$meetingPlace = field('meeting_place', savedValue($savedMeetingExtra, 'meeting_place', 'ห้องประชุมโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง อำเภอสันกำแพง จังหวัดเชียงใหม่'));
+$meetingPlace = field('meeting_place', savedValue($savedMeetingExtra, 'meeting_place', 'ห้องประชุมศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล อำเภอสันกำแพง จังหวัดเชียงใหม่'));
 $openTime = field('open_time', savedValue($savedMeetingExtra, 'open_time', savedValue($savedInvitationExtra, 'meeting_time', '๐๙.๓๐ น.')));
 $closeTime = field('close_time', savedValue($savedMeetingExtra, 'close_time', '๑๑.๐๐ น.'));
 $absentText = field('absent_text', savedValue($savedMeetingExtra, 'absent_text', 'ไม่มี'));
 
+if ((int) ($savedMeetingExtra['history_id'] ?? 0) === $historyId && is_array($savedMeetingExtra['committee'] ?? null)) {
+    foreach ($savedMeetingExtra['committee'] as $i => $savedPerson) {
+        if (isset($committee[$i]) && is_array($savedPerson)) {
+            $committee[$i] = array_merge($committee[$i], array_intersect_key($savedPerson, $committee[$i]));
+        }
+    }
+}
 for ($i = 0; $i < 3; $i++) {
     $committee[$i]['name'] = field("committee_{$i}_name", $committee[$i]['name']);
     $committee[$i]['position'] = field("committee_{$i}_position", $committee[$i]['position']);
@@ -504,50 +609,42 @@ if ($history) {
     ];
 }
 
-$lawText = "๑. ระเบียบกระทรวงมหาดไทยว่าด้วยการเบิกค่าใช้จ่ายในการบริหารงานขององค์กรปกครองส่วนท้องถิ่น พ.ศ. ๒๕๖๒ หมวดที่ ๒ ค่าใช้สอย ข้อ ๑๑ ค่าใช้จ่ายที่เป็นค่าใช้สอยมีดังต่อไปนี้ (๒) ค่าจ้างเอกชนดำเนินงานขององค์กรปกครองส่วนท้องถิ่น\n"
-    . "๒. พระราชบัญญัติการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ. ๒๕๖๐\n"
-    . "๓. ระเบียบกระทรวงการคลังว่าด้วยการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ. ๒๕๖๐ หมวด ๒ ส่วนที่ ๒ กระบวนการซื้อหรือจ้าง ข้อ ๒๑ ในการซื้อหรือจ้างที่มิใช่การจ้างก่อสร้าง ให้หัวหน้าหน่วยงานของรัฐแต่งตั้งคณะกรรมการขึ้นมาคณะหนึ่ง หรือจะให้เจ้าหน้าที่หรือบุคคลใดบุคคลหนึ่งรับผิดชอบในการจัดทำร่างขอบเขตงานหรือรายละเอียดคุณลักษณะเฉพาะของพัสดุที่จะซื้อหรือจ้าง รวมทั้งกำหนดหลักเกณฑ์การพิจารณาคัดเลือกข้อเสนอด้วย\n"
-    . "๔. หนังสือกรมส่งเสริมการปกครองส่วนท้องถิ่น ที่ มท ๐๘๐๘.๒/ว ๑๐๙๕ ลงวันที่ ๒๘ พฤษภาคม ๒๕๖๔ เรื่อง รูปแบบและการจำแนกประเภทรายรับ-รายจ่าย งบประมาณรายจ่ายประจำปีขององค์กรปกครองส่วนท้องถิ่น\n"
+$lawText = "๑. ระเบียบกระทรวงมหาดไทยว่าด้วยการเบิกค่าใช้จ่ายในการบริหารงานขององค์กรปกครองส่วนท้องถิ่น พ.ศ.๒๕๖๒ หมวดที่ ๒ ค่าใช้สอย ข้อ ๑๑ ค่าใช้จ่ายที่เป็นค่าใช้สอยมีดังต่อไปนี้(๒) ค่าจ้างเอกชนดำเนินงานขององค์กรปกครองส่วนท้องถิ่น\n"
+    . "๒. พระราชบัญญัติการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ.๒๕๖๐\n"
+    . "๓. ระเบียบกระทรวงการคลังว่าด้วยการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ. ๒๕๖๐ หมวด ๒ ส่วนที่ ๒ กระบวนการซื้อหรือจ้าง ข้อ ๒๑ ในการซื้อหรือจ้างที่มิใช่การจ้างก่อสร้าง ให้หัวหน้าหน่วยงานของรัฐแต่งตั้งคณะกรรมการขึ้นมาคณะหนึ่งหรือจะให้เจ้าหน้าที่หรือบุคคลใดบุคคลหนึ่งรับผิดชอบในการจัดทำร่างขอบเขตงานหรือรายละเอียดคุณลักษณะเฉพาะของพัสดุที่จะซื้อหรือจ้างรวมทั้งกำหนดหลักเกณฑ์การพิจารณาคัดเลือกข้อเสนอด้วย\n"
+    . "๔. หนังสือกรมส่งเสริมการปกครองส่วนท้องถิ่น ที่ มท ๐๘๐๘.๒/ว ๑๐๙๕ ลงวันที่ ๒๘ พฤษภาคม ๒๕๖๔ เรื่องรูปแบบและการจำแนกประเภทรายรับ-รายจ่ายงบประมาณรายจ่ายประจำปีขององค์กรปกครองส่วนท้องถิ่น\n"
     . "๕. ระเบียบกระทรวงมหาดไทย ว่าด้วยเงินบำรุงโรงพยาบาลและหน่วยบริการสาธารณสุขขององค์กรปกครองส่วนท้องถิ่น (ฉบับที่ ๒) พ.ศ. ๒๕๖๑ (๑) ค่าใช้สอย รายจ่ายเพื่อให้ได้มาซึ่งบริการ\n"
     . "๖. หนังสือกระทรวงมหาดไทย ด่วนที่สุด ที่ มท ๐๘๐๘.๒/ว ๗๓๐๓ ลงวันที่ ๓๐ กันยายน ๒๕๖๕ เรื่อง ซักซ้อมแนวทางการปฏิบัติงานด้านการเงินการคลังของโรงพยาบาลและหน่วยบริการสาธารณสุขขององค์กรปกครองส่วนท้องถิ่น";
 
+$meetingFiscalYear = thaiDigits((string) ($activeCase['fiscal_year'] ?? ''));
+$meetingFiscalPhrase = 'พ.ศ. ' . ($meetingFiscalYear !== '' ? $meetingFiscalYear : '................');
+$invitationRef = 'ชม ๕๑๐๐๖.๑๓.๑/' . $invitationMemoNo;
+$meetingPlaceUnit = 'ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล';
 $defaultSpeeches = [
     [
         'agenda' => 'ระเบียบวาระที่ ๑',
-        'speaker' => $committee[0]['name'] . "\n" . $committee[0]['role'],
-        'content' => "ตามที่ได้เชิญคณะกรรมการฯ เข้าร่วมประชุมในครั้งนี้ สืบเนื่องจากการที่ได้รับแต่งตั้งเป็นคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและราคากลาง เพื่อจัดซื้อยา ใช้สนับสนุนการให้บริการรักษาประชาชน ของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ประจำปีงบประมาณ พ.ศ. ๒๕๖๙ ตามบันทึกข้อความโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ที่................. ลงวันที่.................................. เรื่อง แจ้งคำสั่งและเชิญประชุมแต่งตั้งคณะกรรมการร่างขอบเขตและกำหนดราคากลาง เพื่อจัดหาการจัดซื้อยา จำนวน {$itemCountText} รายการ ประจำปีงบประมาณ พ.ศ. ๒๕๖๙ โดยให้มีหน้าที่พิจารณากลั่นกรองและกำหนดรายละเอียดคุณลักษณะเฉพาะและราคากลางของยาที่จะจัดซื้อ ให้ตรงตามวัตถุประสงค์และตามระเบียบราชการ ให้เกิดความคุ้มค่ามากที่สุด เพื่อให้การดำเนินงานตามอำนาจหน้าที่ของคณะกรรมการฯ เป็นไปด้วยความเรียบร้อย จึงได้เชิญท่านเข้าร่วมประชุมในครั้งนี้",
+        'speaker' => 'ประธานกรรมการ',
+        'content' => "ตามที่ได้เชิญคณะกรรมการฯ เข้าร่วมประชุมในครั้งนี้ สืบเนื่องจากการที่ได้รับแต่งตั้งเป็นคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและราคากลาง เพื่อจัดซื้อยาใช้สนับสนุนการให้บริการรักษาประชาชนของ{$meetingPlaceUnit}และเครือข่ายหน่วยบริการปฐมภูมิ จำนวน ๑๐ แห่ง ประจำปีงบประมาณ {$meetingFiscalPhrase} ตามบันทึกข้อความ{$meetingPlaceUnit} ที่{$invitationRef} ลงวันที่ {$invitationDocDate} เรื่อง แต่งตั้งคณะกรรมการร่างขอบเขตและกำหนดราคากลางเพื่อจัดหาการจัดซื้อยา จำนวน {$itemCountText} รายการ ประจำปีงบประมาณ {$meetingFiscalPhrase} โดยให้มีหน้าที่พิจารณากลั่นกรองและกำหนดรายละเอียดคุณลักษณะเฉพาะและราคากลางของยาที่จะจัดซื้อให้ตรงตามวัตถุประสงค์และตามระเบียบราชการ ให้เกิดความคุ้มค่ามากที่สุด เพื่อให้การดำเนินงานตามอำนาจหน้าที่ของคณะกรรมการฯ เป็นไปด้วยความเรียบร้อย จึงได้เชิญท่านเข้าร่วมประชุมในครั้งนี้",
     ],
-    ['agenda' => 'ระเบียบวาระที่ ๑', 'speaker' => 'มติที่ประชุม', 'topic' => '', 'content' => 'รับทราบ'],
-    ['agenda' => 'ระเบียบวาระที่ ๒', 'speaker' => $committee[0]['name'] . "\n" . $committee[0]['role'], 'topic' => '', 'content' => $lawText],
+    ['agenda' => 'ระเบียบวาระที่ ๑', 'speaker' => 'มติที่ประชุม', 'content' => 'รับทราบ'],
+    ['agenda' => 'ระเบียบวาระที่ ๒', 'speaker' => 'ประธานกรรมการ', 'content' => $lawText],
     [
         'agenda' => 'ระเบียบวาระที่ ๓',
-        'speaker' => $committee[0]['name'] . "\n" . $committee[0]['role'],
-        'content' => "ขอให้คณะกรรมการร่วมกันพิจารณารายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง เพื่อจัดหาการจัดซื้อยา จำนวน {$itemCountText} รายการ ดังรายการต่อไปนี้\n{$itemListForSpeech}\nเพื่อเป็นไปตามระเบียบพัสดุอย่างรอบคอบ เพื่อใช้สนับสนุนการให้บริการรักษาประชาชนของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ประจำปีงบประมาณ พ.ศ. ๒๕๖๙",
+        'speaker' => 'ประธานกรรมการ',
+        'content' => "ขอให้คณะกรรมการร่วมกันพิจารณารายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง เพื่อจัดหาการจัดซื้อยา จำนวน {$itemCountText} รายการ ดังรายการต่อไปนี้\n{$itemListForSpeech}\nเพื่อเป็นไปตามระเบียบพัสดุ อย่างรอบคอบ เพื่อใช้สนับสนุนการให้บริการรักษาประชาชนของ{$meetingPlaceUnit}และเครือข่ายหน่วยบริการปฐมภูมิประจำปีงบประมาณ {$meetingFiscalPhrase}",
     ],
+    ['agenda' => 'ระเบียบวาระที่ ๓', 'speaker' => 'มติที่ประชุม', 'content' => 'เห็นชอบกำหนดรายละเอียดคุณลักษณะเฉพาะ รายละเอียดตามเอกสารแนบท้ายตารางที่ ๑'],
     [
         'agenda' => 'ระเบียบวาระที่ ๓',
-        'speaker' => 'มติที่ประชุม',
-        'topic' => '',
-        'content' => "เห็นชอบกำหนดรายละเอียดคุณลักษณะเฉพาะ ดังนี้\n๑. เป็นยาในบัญชียาหลักแห่งชาติที่องค์การเภสัชกรรมมีจัดจำหน่าย\n๒. ส่วนประกอบยาแต่ละรายการตามชื่อยาสามัญทางยา ที่กำหนด {$itemCountText} รายการ\n๓. บรรจุภัณฑ์สามารถบรรจุในขวดปราศจากเชื้อ ภาชนะปิดสนิท แผง สตริป หรือบรรจุภัณฑ์ที่ผ่านการรับรองมาตรฐาน\n๔. ฉลาก\n- ระบุชื่อยา ส่วนประกอบสำคัญและความแรง วันผลิต วันสิ้นอายุ เลขที่ผลิต และเลขทะเบียนตำรับยาไว้ชัดเจนปรากฏบนบรรจุภัณฑ์\n- กรณีที่บรรจุในขวด หลอด แผง ต้องระบุวัน เดือน ปีที่ยาหมดอายุ และเลขที่ผลิตไว้อย่างชัดเจน",
-    ],
-    [
-        'agenda' => 'ระเบียบวาระที่ ๓',
-        'speaker' => $committee[1]['name'],
-        'topic' => '',
-        'content' => 'จากการพิจารณาขอบเขตงานและราคากลางที่อ้างอิงราคากลาง อ้างอิงตาระเบียบการจัดซื้อจัดจ้าง ตามกฎกระทรวงกำหนดพัสดุและวิธีการจัดซื้อจัดจ้างพัสดุที่รัฐต้องการส่งเสริมหรือสนับสนุน พ.ศ.2563 ข้อ 15 (๒) ยาในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มิใช่ยา ซึ่งองค์การเภสัชกรรม สภากาชาดไทย หรือโรงงานเภสัชกรรมทหาร ได้ผลิตออกจำหน่ายแล้ว และข้อ ๑7 ให้หน่วยงานของรัฐจัดซื้อพัสดุตามข้อ 15 (2) โดยวิธีเฉพาะเจาะจงจากองค์การเภสัชกรรม หรือสภากาชาดไทย เว้นแต่หน่วยงานในสังกัดกระทรวงกลาโหมให้จัดซื้อจากโรงงานเภสัชกรรมทหารสำหรับหน่วยงานในสังกัดสำนักงานตำรวจแห่งชาติจะซื้อจากองค์การเภสัชกรรมหรือโรงงานเภสัชกรรมทหารก็ได้ ทั้งนี้ หน่วยงานของรัฐสามารถจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มีใช่ยาจากผู้ขายรายอื่นได้ หากองค์การเภสัชกรรม สภากาชาดไทย หรือโรงงานเภสัชกรรมทหาร ไม่สามารถผลิตออกจำหน่ายให้แก่หน่วยงานของรัฐได้ทันกำหนดตามที่หน่วยงานของรัฐได้แจ้งแผนประจำปีล่วงหน้า ประกอบกับหนังสือคณะกรรมการวินิจฉัยปัญหา จัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ กรมบัญชีกลาง ที่ กค (กวจ) 0405.2/ว 119 ลงวันที่ 12 มีนาคม 2562 ข้อ ๓.๑.๑ ให้หน่วยงานของรัฐจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มิใช่ยาซึ่งองค์การเภสัชกรรมหรือสภากาชาดไทยได้ผลิตออกจำหน่ายแล้ว โดยวิธีเฉพาะเจาะจงจากองค์การเภสัชกรรมหรือสภากาชาดไทย เว้นแต่หน่วยงานในสังกัดกระทรวงกลาโหมให้จัดซื้อจากโรงงานเภสัชกรรมทหารสำหรับหน่วยงานในสังกัดสำนักงานตำรวจแห่งชาติจะซื้อจากองค์การเภสัชกรรมหรือโรงงานเภสัชกรรมทหารก็ได้ ทั้งนี้ หน่วยงานของรัฐสามารถจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มิใช่ยาจากผู้ขายรายอื่นได้หากองค์การเภสัชกรรม สภากาชาดไทย หรือโรงงานเภสัชกรรมทหาร ไม่สามารถผลิตออกจำหน่ายให้แก่หน่วยงานของรัฐได้ทันกำหนดตามที่หน่วยงานของรัฐได้แจ้งแผนประจำปีล่วงหน้า',
-    ],
-    [
-        'agenda' => 'ระเบียบวาระที่ ๓',
-        'speaker' => $committee[2]['name'],
-        'topic' => '',
-        'content' => 'จากประวัติการจัดซื้อจัดจ้างย้อนหลัง ๒ ปี และข้อมูลราคาที่มีอยู่ เห็นควรเสนอจัดซื้อจัดจ้างตามระเบียบ โดยอ้างอิงจากการจัดซื้อจัดจ้างตามระเบียบ โดยสามารถอ้างอิงราคาที่เคยซื้อย้อนหลัง 2 ปี หรือสืบราคาร้านค้าเพื่อใช้ประกอบการกำหนดราคากลางไม่น้อยกว่า 3 ร้านตามระยะเวลาที่กำหนดให้เสนอราคา',
+        'speaker' => $committee[1]['name'] !== '' ? $committee[1]['name'] : 'กรรมการ',
+        'content' => 'จากการพิจารณาขอบเขตงานและราคากลางที่อ้างอิงราคากลางตามพระราชบัญญัติจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ.๒๕๖๐ มาตรา ๔(๒) ราคาที่ได้มาจากฐานข้อมูลราคาอ้างอิงของพัสดุที่กรมบัญชีกลางจัดทำ โดยอ้างอิงเกณฑ์ราคา และกฎกระทรวงกำหนดพัสดุและวิธีการจัดซื้อจัดจ้างพัสดุที่รัฐต้องการส่งเสริมหรือสนับสนุน พ.ศ.๒๕๖๓ หมวด ๕ พัสดุส่งเสริมสุขภาพและสาธารณสุข ข้อ ๑๗ ให้หน่วยงานของรัฐจัดซื้อพัสดุตามข้อ ๑๕ (๒) โดยวิธีเฉพาะเจาะจงจากองค์การเภสัชกรรมหรือสภากาชาดไทย เว้นแต่หน่วยงานในสังกัดกระทรวงกลาโหมให้จัดซื้อจากโรงงานเภสัชกรรมทหาร สำหรับหน่วยงานในสังกัดสำนักงานตำรวจแห่งชาติจะจัดซื้อจากองค์การเภสัชกรรมหรือโรงงานเภสัชกรรมทหารก็ได้ ทั้งนี้ หน่วยงานของรัฐสามารถจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มิใช่ยาจากผู้ขายรายอื่นได้หากองค์การเภสัชกรรม สภากาชาดไทย หรือโรงงานเภสัชกรรมทหารไม่สามารถผลิตออกจำหน่ายให้แก่หน่วยงานของรัฐได้ทันกำหนดตามที่หน่วยงานของรัฐได้แจ้งแผนประจำปีล่วงหน้า',
     ],
     [
         'agenda' => 'ระเบียบวาระที่ ๓',
         'speaker' => 'มติที่ประชุม',
-        'topic' => '',
-        'content' => 'เห็นชอบกำหนดราคากลาง โดยใช้ราคากลางจาก อ้างอิงตามหนังสือคณะกรรมการวินิจฉัยปัญหา จัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ กรมบัญชีกลาง ที่ กค (กวจ) ๐๔๐๕.๒/ว ๑๑๙ ลงวันที่ ๑๒ มีนาคม ๒๕๖๒ สืบราคาไม่ต่ำกว่า 3 ร้าน โดยไม่เกินราคาที่ได้มาจากการคํานวณตามหลักเกณฑ์ที่คณะกรรมการราคากลางกำหนดจาก ประกาศคณะกรรมการพัฒนาระบบยาแห่งชาติ เรื่อง กำหนดราคากลางยา ลงวันที่ ๒๕ สิงหาคม ๒๕๖๘ (ฉบับลงราชกิจจานุเบกษา) โดยมีผู้เสนอราคา จำนวน ๑ ร้านได้แก่ บริษัท ................................................... รายละเอียด ดังนี้',
+        'content' => "เห็นชอบกำหนดราคากลาง โดยใช้ราคากลางจากคณะกรรมการพัฒนาระบบยาแห่งชาติ เรื่องกำหนดราคากลางยาลงวันที่ ๒๕ สิงหาคม ๒๕๖๘ (ฉบับลงราชกิจจานุเบกษา) ได้กำหนดไว้เพื่อใช้ในการปฏิบัติงานของสาธารณสุขและการแพทย์ตำบลทรายมูล ประจำปีงบประมาณ {$meetingFiscalPhrase} รายละเอียดตามเอกสารแนบท้าย ตารางที่ ๒",
     ],
+    ['agenda' => 'ระเบียบวาระที่ ๔', 'speaker' => '', 'content' => 'ไม่มี'],
 ];
 $defaultSpeeches = array_map(static function (array $speech) use ($invitationMemoNo, $invitationDocDate): array {
     if (isset($speech['content'])) {
@@ -559,9 +656,18 @@ $defaultSpeeches = array_map(static function (array $speech) use ($invitationMem
     }
     return $speech;
 }, $defaultSpeeches);
+// Track whether the user has adopted the new wording for this specific TOR history.
+// A preview never changes stored data; the marker is saved only with save_document.
+$templateRevision = 'meeting-template-2026-11-v2';
+$isTemplatePreview = (($_GET['use_template'] ?? '') === '1');
+$hasSameSavedHistory = (int) ($savedMeetingExtra['history_id'] ?? 0) === $historyId;
+$savedTemplateRevision = $hasSameSavedHistory ? (string) ($savedMeetingExtra['template_revision'] ?? '') : '';
+$postedTemplateRevision = (string) ($_POST['template_revision'] ?? '');
+$activeTemplateRevision = $isTemplatePreview ? $templateRevision : ($postedTemplateRevision !== '' ? $postedTemplateRevision : $savedTemplateRevision);
+$hasAdoptedTemplate = $hasSameSavedHistory && $savedTemplateRevision === $templateRevision;
 $postedSpeakers = $_POST['speech_speaker'] ?? null;
 $savedSpeeches = is_array($savedMeetingExtra['speeches'] ?? null) ? $savedMeetingExtra['speeches'] : [];
-if ((int) ($savedMeetingExtra['history_id'] ?? 0) !== $historyId) {
+if (!$hasSameSavedHistory || $isTemplatePreview) {
     $savedSpeeches = [];
 }
 if ($savedSpeeches && count($items) > 0) {
@@ -589,11 +695,27 @@ if (is_array($postedSpeakers)) {
     }
 }
 if (!$speeches) $speeches = $savedSpeeches ?: $defaultSpeeches;
+// Older documents may have saved the new wording before revision tracking existed.
+// Compare the actual speaking roles and content, not incidental 'topic' keys.
+$sameAsCurrentTemplate = count($savedSpeeches) === count($defaultSpeeches);
+if ($sameAsCurrentTemplate) {
+    foreach ($defaultSpeeches as $i => $templateSpeech) {
+        $oldSpeech = $savedSpeeches[$i] ?? [];
+        if (!is_array($oldSpeech)) { $sameAsCurrentTemplate = false; break; }
+        foreach (['agenda', 'speaker', 'content'] as $key) {
+            if (trim((string) ($oldSpeech[$key] ?? '')) !== trim((string) ($templateSpeech[$key] ?? ''))) {
+                $sameAsCurrentTemplate = false;
+                break 2;
+            }
+        }
+    }
+}
+$showNewTemplateLink = $hasSelectedHistory && !$isTemplatePreview && !$hasAdoptedTemplate && !$sameAsCurrentTemplate && (bool) $savedSpeeches;
 $agendaTitles = [
     'ระเบียบวาระที่ ๑' => 'เรื่อง ประธานแจ้งให้ที่ประชุมทราบ',
     'ระเบียบวาระที่ ๒' => 'เรื่อง ข้อกฎหมาย ระเบียบ และหนังสือสั่งการที่เกี่ยวข้อง',
     'ระเบียบวาระที่ ๓' => 'พิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลางเพื่อจัดหา',
-    'ระเบียบวาระที่ ๔' => 'เรื่องอื่นๆ (ถ้ามี)',
+    'ระเบียบวาระที่ ๔' => '',
 ];
 $agendaOrder = array_keys($agendaTitles);
 $speechesByAgenda = [];
@@ -609,6 +731,23 @@ foreach ($speeches as $speech) {
     $speechesByAgenda[$agenda][] = $speech;
 }
 
+$offerTotal = array_sum(array_map('meetingStoredTotal', $items));
+$meetingProjectName = 'จัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย จำนวน ' . $itemCountText . ' รายการ';
+$reportMemoNo = field('report_memo_no', savedValue($savedMeetingExtra, 'report_memo_no', ''));
+$reportDocDate = field('report_doc_date', savedValue($savedMeetingExtra, 'report_doc_date', ''));
+$priceReferenceText = 'อ้างอิงราคากลางตามพระราชบัญญัติจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ.๒๕๖๐ มาตรา ๔ (๒) ราคาที่ได้มาจากฐานข้อมูลราคาอ้างอิงของพัสดุที่กรมบัญชีกลางจัดทำ กำหนดราคากลางไว้ในประกาศคณะกรรมการพัฒนาระบบยาแห่งชาติ เรื่องกำหนดราคากลางยาลงวันที่ ๒๕ สิงหาคม ๒๕๖๘ (ฉบับลงราชกิจจานุเบกษา)';
+$meetingPriceWarnings = [];
+foreach ($committee as $i => $person) {
+    if (trim((string) ($person['name'] ?? '')) === '') {
+        $meetingPriceWarnings[] = 'ยังไม่มีรายชื่อกรรมการลำดับที่ ' . thaiDigits((string) ($i + 1)) . ' ในข้อมูลที่เลือก';
+    }
+}
+foreach ($items as $i => $item) {
+    if (!isset($item['offer_total']) || !is_numeric($item['offer_total'])) continue;
+    if (abs((float) $item['offer_total'] - meetingItemOfferTotal($item)) > 0.011) {
+        $meetingPriceWarnings[] = 'รายการที่ ' . thaiDigits((string) ($i + 1)) . ' ยอดเงินในประวัติ TOR ไม่ตรงกับผลคูณราคาและจำนวน โปรดตรวจสอบหน่วยบรรจุ';
+    }
+}
 if (($_POST['action'] ?? '') === 'save_document') {
     if ($caseId <= 0 || !$activeCase) {
         $error = 'กรุณาเลือกชุดข้อมูลจาก TOR ก่อนบันทึก';
@@ -623,6 +762,8 @@ if (($_POST['action'] ?? '') === 'save_document') {
             'meeting_date' => $meetingDate,
             'meeting_time' => $meetingTime,
             'meeting_place' => $meetingPlace,
+            'report_memo_no' => $reportMemoNo,
+            'report_doc_date' => $reportDocDate,
             'open_time' => $openTime,
             'close_time' => $closeTime,
             'absent_text' => $absentText,
@@ -630,14 +771,14 @@ if (($_POST['action'] ?? '') === 'save_document') {
             'items' => itemSnapshot($items),
             'references' => $referenceDocuments,
             'speeches' => $speeches,
+            'template_revision' => $activeTemplateRevision === $templateRevision ? $templateRevision : '',
             'saved_at' => date('c'),
         ]);
-        header('Location: meeting_report.php?case_id=' . $caseId . '&history_id=' . $historyId . '&saved=1');
+        header('Location: meeting_report.php?case_id=' . $caseId . '&history_id=' . $historyId . '&saved=1#meeting-preview', true, 303);
         exit;
     }
 }
 
-$offerTotal = array_sum(array_map('meetingItemOfferTotal', $items));
 $hasPackageItems = count(array_filter($items, 'meetingItemHasPackage')) > 0;
 if (($_POST['action'] ?? '') === 'word') {
     $meetingWordHtml = meetingReportWordHtml([
@@ -702,7 +843,16 @@ $timeFields = [
             @top-center { content: ""; }
         }
         @page attendance {
-            @top-center { content: ""; }
+            /* The attendance sheet precedes the minutes and is unnumbered.
+               Restart the physical page counter so the minutes begin at ๑. */
+            counter-reset: page 0;
+            @top-center { content: none; }
+        }
+        @page budget {
+            @top-center { content: none; }
+        }
+        @page annex {
+            @top-center { content: none; }
         }
         .report-page {
             width: 210mm;
@@ -783,12 +933,70 @@ $timeFields = [
         .signature-grid .chair { grid-column: 1 / -1; }
         .report-main { page: report; }
         .attendance-page { page: attendance; }
+        .annex-page { page: annex; font-size: 16pt; }
+        /* Consistent 16pt type in annex tables 1 and 2, in preview and print. */
+        .annex-page .doc-title,
+        .annex-page .doc-title *,
+        .annex-page .annex-heading,
+        .annex-page .annex-table,
+        .annex-page .annex-table th,
+        .annex-page .annex-table td,
+        .annex-page .annex-table td *,
+        .annex-page .spec-detail {
+            font-size: 16pt !important;
+        }
+        .budget-page { page: budget; }
+        .annex-table { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:.3cm; }
+        .annex-table th,.annex-table td { border:0.5pt solid #000; padding:3px 6px; vertical-align:top; overflow-wrap:anywhere; }
+        .annex-table th { font-weight:700; text-align:center; }
+        .annex-table thead { display:table-header-group; }
+        .annex-table tr { break-inside:avoid; page-break-inside:avoid; }
+        .annex-heading { font-weight:700; margin:.4cm 0 .2cm; }
+        .spec-detail { white-space:pre-line; overflow-wrap:anywhere; }
+        .budget-frame { border:.5pt solid #000; padding:.3cm .25cm; margin-top:.45cm; }
+        .budget-line { display:grid; grid-template-columns: 4.2cm minmax(0,1fr); column-gap:.2cm; margin-bottom:.2cm; }
+        .budget-committee { margin:.15cm 0 .15cm .4cm; }
+        .report-page h3 { font-size:16pt; }
+
         @media print {
-            body { background: #fff !important; margin: 0 !important; }
+            /* Chrome can print inherited background graphics, including subtle UI gradients.
+               Reset only the document print surface; keep screen styling unchanged. */
+            html, body, main, main > section, .report-page, .report-page *,
+            .report-page *::before, .report-page *::after {
+                background: #fff !important;
+                background-color: #fff !important;
+                background-image: none !important;
+                box-shadow: none !important;
+                text-shadow: none !important;
+            }
+            html, body { margin: 0 !important; padding: 0 !important; }
             .no-print { display: none !important; }
             main { display: block !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
             .report-page { width: auto; min-height: 0; margin: 0; padding: 0; page-break-after: always; }
             .report-page:last-child { page-break-after: auto; }
+
+            /* A single collapsed 1px rule avoids overlapping outer/table-cell
+               borders and fractional 0.5pt rasterization differences in Chrome. */
+            .report-page .attendance-table,
+            .report-page .annex-table,
+            .report-page .medicine-table {
+                border: 0 !important;
+                border-collapse: collapse !important;
+                border-spacing: 0 !important;
+                outline: 0 !important;
+                box-shadow: none !important;
+            }
+            .report-page .attendance-table th,
+            .report-page .attendance-table td,
+            .report-page .annex-table th,
+            .report-page .annex-table td,
+            .report-page .medicine-table th,
+            .report-page .medicine-table td {
+                border: 1px solid #000 !important;
+                outline: 0 !important;
+                box-shadow: none !important;
+            }
+            .report-page .budget-frame { border: 1px solid #000 !important; }
         }
     </style>
 </head>
@@ -807,6 +1015,9 @@ $timeFields = [
         <?php if ($error): ?>
             <div class="mb-4 rounded-md border border-red-500/40 bg-red-950/60 p-3 text-sm text-red-100"><?= h($error) ?></div>
         <?php endif; ?>
+        <?php foreach ($meetingPriceWarnings as $priceWarning): ?>
+            <div class="mb-2 rounded-md border border-amber-500/40 bg-amber-950/40 p-3 text-sm text-amber-100"><?= h($priceWarning) ?></div>
+        <?php endforeach; ?>
         <?php if (($_GET['saved'] ?? '') === '1' && $caseId > 0): ?>
             <div class="mb-4 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">
                 บันทึกเอกสารหัวข้อ 4 เรียบร้อยแล้ว
@@ -828,12 +1039,16 @@ $timeFields = [
                     </select>
                 </label>
                 <p class="mt-2 text-xs text-zinc-500">เลือกประวัติ TOR เพื่อดึงรายชื่อกรรมการและรายการยามาใช้ในรายงานการประชุม</p>
+                <?php if ($showNewTemplateLink): ?>
+                <a class="mt-2 inline-block rounded border border-amber-500/50 px-3 py-2 text-xs text-amber-200" href="meeting_report.php?case_id=<?= (int) $caseId ?>&amp;history_id=<?= (int) $historyId ?>&amp;use_template=1">แสดงข้อความต้นแบบใหม่ (ยังไม่ทับข้อมูลที่บันทึก)</a>
+                <?php endif; ?>
         </form>
 
         <form id="meeting_report_form" method="post" class="grid gap-4">
             <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
             <input type="hidden" name="case_id" value="<?= (int) $caseId ?>">
             <input type="hidden" name="history_id" value="<?= (int) $historyId ?>">
+            <input type="hidden" name="template_revision" value="<?= h($activeTemplateRevision) ?>">
             <section class="rounded-md border border-zinc-800">
                 <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="false">
                     <span>2. หัวเอกสาร</span>
@@ -866,6 +1081,14 @@ $timeFields = [
                     <label class="mt-3 block">
                         <span class="text-sm text-zinc-300">สถานที่ประชุม</span>
                         <input name="meeting_place" value="<?= h($meetingPlace) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                    </label>
+                    <label class="mt-3 block">
+                        <span class="text-sm text-zinc-300">เลขที่หนังสือรายงานผล (ใช้ในหัวเอกสารแนบท้าย)</span>
+                        <input name="report_memo_no" value="<?= h($reportMemoNo) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 sm:text-sm">
+                    </label>
+                    <label class="mt-3 block">
+                        <span class="text-sm text-zinc-300">วันที่หนังสือรายงานผล (ใช้ในหัวเอกสารแนบท้าย)</span>
+                        <input name="report_doc_date" value="<?= h($reportDocDate) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 sm:text-sm">
                     </label>
                     <label class="mt-3 block">
                         <span class="text-sm text-zinc-300">ผู้ไม่เข้าประชุม</span>
@@ -931,11 +1154,53 @@ $timeFields = [
         </form>
     </aside>
 
-    <section class="order-1 overflow-auto">
+    <section id="meeting-preview" class="order-1 overflow-auto" tabindex="-1">
+        <?php if (($_GET['saved'] ?? '') === '1' && $caseId > 0): ?>
+        <div class="no-print mb-4 rounded-lg border p-4" style="background:#ffffff !important;color:#17212b !important;border-color:#94a3b8 !important;box-shadow:none !important;" role="status">
+            <div class="font-semibold" style="color:#17212b !important;">บันทึกรายงานการประชุมเรียบร้อยแล้ว</div>
+            <p class="mt-1 text-sm" style="color:#334155 !important;">นี่คือตัวอย่างรายงานจากข้อมูลที่บันทึกไว้ในโครงการและประวัติ TOR ที่เลือก หากต้องการแก้ไขเพิ่มเติม ใช้ฟอร์มด้านข้างแล้วกดบันทึกอีกครั้ง</p>
+        </div>
+        <?php endif; ?>
+        <article class="report-page attendance-page">
+            <?php if ($hasSelectedHistory): ?>
+            <div class="doc-title">
+                <div>รายงานการประชุม</div>
+                <div>คณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง</div>
+                <div>เพื่อจัดหาการจัดซื้อยา จำนวน <?= h($itemCountText) ?> รายการ</div>
+                <div>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
+                <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
+                <div>ณ&nbsp;&nbsp;<?= h($meetingPlace) ?></div>
+            </div>
+
+            <table class="attendance-table">
+                <thead>
+                <tr>
+                    <th style="width: 8%">ลำดับ</th>
+                    <th>รายชื่อคณะกรรมการ<br>ผู้เข้าร่วมประชุม</th>
+                    <th style="width: 20%">ตำแหน่ง</th>
+                    <th style="width: 20%">ลายมือชื่อ</th>
+                    <th style="width: 20%">หมายเหตุ</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($committee as $i => $person): ?>
+                    <tr>
+                        <td class="center"><?= thaiDigits($i + 1) ?></td>
+                        <td><?= h($person['name']) ?></td>
+                        <td><?= h($person['role']) ?></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </article>
+
         <article class="report-page report-main">
             <?php if ($hasSelectedHistory): ?>
             <div class="doc-title">
-                <div><?= h($meetingTitle) ?></div>
+                <div>รายงานการประชุม<?= h(preg_replace('/^รายงานการประชุม/u', '', $meetingTitle) ?? $meetingTitle) ?></div>
                 <div><?= h($purposeLine) ?></div>
                 <div><?= h($fiscalLine) ?></div>
                 <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
@@ -983,7 +1248,7 @@ $timeFields = [
                                     <?php foreach ($items as $i => $item): ?>
                                         <div class="medicine-line">
                                             <div><?= thaiDigits($i + 1) ?>. <?= h((string) ($item['name'] ?? '')) ?></div>
-                                            <div class="qty"><?= h(meetingItemQuantityLine($item)) ?></div>
+                                            <div class="qty"><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></div>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
@@ -994,38 +1259,7 @@ $timeFields = [
                         </div>
                     </div>
                 <?php endforeach; ?>
-                <?php if ($agendaName === 'ระเบียบวาระที่ ๓' && $items): ?>
-                    <table class="medicine-table">
-                        <thead>
-                        <tr>
-                            <th style="width: 8%"><?= $hasPackageItems ? 'ที่' : 'ลำดับ' ?></th>
-                            <th>รายการยา</th>
-                            <th style="width: 14%">ราคากลาง</th>
-                            <th style="width: 14%">ราคาเสนอ</th>
-                            <th style="width: <?= $hasPackageItems ? '11%' : '14%' ?>">จำนวน</th>
-                            <th style="width: <?= $hasPackageItems ? '20%' : '12%' ?>"><?= $hasPackageItems ? 'ขนาดบรรจุ/หน่วยนับ' : 'หน่วยนับ' ?></th>
-                            <th style="width: 16%">มูลค่ารวม</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($items as $i => $item): ?>
-                            <tr>
-                                <td class="center"><?= thaiDigits($i + 1) ?></td>
-                                <td><?= h((string) ($item['name'] ?? '')) ?></td>
-                                <td class="right"><?= money((float) ($item['reference_price'] ?? 0)) ?></td>
-                                <td class="right"><?= money((float) ($item['offer_price'] ?? 0)) ?></td>
-                                <td class="right"><?= quantityText(meetingItemQuantity($item)) ?></td>
-                                <td class="center"><?= h(meetingItemUnitText($item)) ?></td>
-                                <td class="right"><?= money(meetingItemOfferTotal($item)) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                        <tr>
-                            <td colspan="6" class="center">รวม</td>
-                            <td class="right"><?= money((float) $offerTotal) ?></td>
-                        </tr>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
+
             <?php endforeach; ?>
 
             <div class="mt-2 font-bold">ปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal"><?= h($closeTime) ?></span></div>
@@ -1046,37 +1280,80 @@ $timeFields = [
             </div>
             <?php endif; ?>
         </article>
-
-        <article class="report-page attendance-page">
+        <article class="report-page budget-page">
+            <?php if ($hasSelectedHistory): ?>
+            <div style="text-align:right;font-weight:700;">แบบ บก.06</div>
+            <div class="doc-title" style="margin-top:.3cm;">
+                <div>ตารางแสดงวงเงินงบประมาณที่ได้รับจัดสรรและรายละเอียดค่าใช้จ่าย</div>
+                <div>การจัดซื้อจัดจ้างที่มิใช่งานก่อสร้าง</div>
+            </div>
+            <div class="budget-frame">
+                <div class="budget-line"><strong>๑. ชื่อโครงการ</strong><div><?= h($meetingProjectName) ?></div></div>
+                <div class="budget-line"><strong>๒. หน่วยงานเจ้าของโครงการ</strong><div>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div></div>
+                <div class="budget-line"><strong>๓. วงเงินงบประมาณที่ได้รับการจัดสรร</strong><div><?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></div>
+                <div class="budget-line"><strong>๔. วันที่กำหนดราคากลาง (ราคาอ้างอิง)</strong><div><?= h($meetingDate) ?><div>เป็นเงิน <?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></div></div>
+                <div><strong>๕. แหล่งที่มาของราคากลาง (ราคาอ้างอิง) :</strong> <?= h($priceReferenceText) ?></div>
+                <div style="margin-top:.2cm;"><strong>๖. เจ้าหน้าที่ผู้กำหนดราคากลาง (ราคาอ้างอิง)</strong></div>
+                <?php foreach ($committee as $i => $person): ?>
+                    <div class="budget-committee"><?= thaiDigits($i + 1) ?>. <?= h($person['name']) ?>&nbsp;&nbsp;<?= h($person['position']) ?>&nbsp;&nbsp;<?= h($person['role']) ?></div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </article>
+        <article class="report-page annex-page">
             <?php if ($hasSelectedHistory): ?>
             <div class="doc-title">
-                <div><?= h($meetingTitle) ?></div>
-                <div><?= h($purposeLine) ?></div>
-                <div><?= h($fiscalLine) ?></div>
-                <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
-                <div>ณ&nbsp;&nbsp;<?= h($meetingPlace) ?></div>
+                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?> ลงวันที่ <?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></div>
+                <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
+                <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
             </div>
-
-            <table class="attendance-table">
-                <thead>
-                <tr>
-                    <th style="width: 8%">ลำดับ</th>
-                    <th>รายชื่อคณะกรรมการ<br>ผู้เข้าร่วมประชุม</th>
-                    <th style="width: 20%">ตำแหน่ง</th>
-                    <th style="width: 20%">ลายมือชื่อ</th>
-                    <th style="width: 20%">หมายเหตุ</th>
-                </tr>
-                </thead>
+            <div class="annex-heading">ตารางที่ ๑ กำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยา <?= h($itemCountText) ?> รายการ</div>
+            <table class="annex-table">
+                <thead><tr><th style="width:8%">ลำดับ</th><th style="width:25%">รายการ</th><th style="width:17%">จำนวน/หน่วย</th><th>คุณสมบัติ</th></tr></thead>
                 <tbody>
-                <?php foreach ($committee as $i => $person): ?>
+                    <?php foreach ($items as $i => $item): ?>
                     <tr>
-                        <td class="center"><?= thaiDigits($i + 1) ?></td>
-                        <td><?= h($person['name']) ?></td>
-                        <td><?= h($person['role']) ?></td>
-                        <td></td>
-                        <td></td>
+                        <td class="center"><?= thaiDigits($i+1) ?></td>
+                        <td><?= h((string) ($item['name'] ?? '')) ?></td>
+                        <td><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></td>
+                        <td>
+                            <?php $isTablet = in_array(trim((string) ($item['unit'] ?? '')), ['เม็ด', 'tablet', 'tablets'], true); ?>
+                            ๑.<?= $isTablet ? 'ยาเม็ดชนิดรับประทาน' : 'รูปแบบยาตามรายละเอียดของรายการ' ?><br>
+                            ๒.ประกอบด้วยตัวยา <?= h((string) ($item['name'] ?? '')) ?><br>
+                            <?php if (meetingItemSpecification($item) !== ''): ?><div class="spec-detail"><?= h(meetingItemSpecification($item)) ?></div><?php endif; ?>
+                            ๓.<?= $isTablet ? 'บรรจุในขวด ภาชนะ ปิดสนิท' : 'ภาชนะบรรจุและรูปแบบตามคุณลักษณะเฉพาะที่บันทึกใน TOR' ?><br>
+                            ๔.ฉลาก<br>
+                            -ระบุชื่อยา ส่วนประกอบสำคัญและความแรง วันผลิต วันสิ้นอายุ เลขที่ผลิต และเลขทะเบียนตำรับยาไว้ชัดเจนปรากฏบนบรรจุภัณฑ์<br>
+                            -กรณีที่บรรจุในขวด หลอด แผง ต้องระบุวัน เดือน ปี ที่ยาหมดอายุ, เลขที่ผลิตไว้อย่างชัดเจน
+                        </td>
                     </tr>
-                <?php endforeach; ?>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </article>
+        <article class="report-page annex-page">
+            <?php if ($hasSelectedHistory): ?>
+            <div class="doc-title">
+                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?> ลงวันที่ <?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></div>
+                <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
+                <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
+            </div>
+            <div class="annex-heading">ตารางที่ ๒ กำหนดรายละเอียดราคากลางสำหรับการจัดซื้อยา <?= h($itemCountText) ?> รายการ</div>
+            <table class="annex-table">
+                <thead><tr><th style="width:7%">ลำดับ</th><th style="width:28%">รายการ</th><th style="width:17%">ราคากลาง (บาท)</th><th style="width:12%">หน่วย</th><th style="width:15%">จำนวนจัดซื้อ</th><th style="width:21%">จำนวนงบประมาณที่จัดซื้อ (บาท)</th></tr></thead>
+                <tbody>
+                    <?php foreach ($items as $i => $item): ?>
+                    <tr>
+                        <td class="center"><?= thaiDigits($i + 1) ?>.</td>
+                        <td><?= h((string) ($item['name'] ?? '')) ?></td>
+                        <td class="right"><?= meetingPriceText($item['offer_price'] ?? 0) ?><?php if (meetingItemHasPackage($item)): ?> (<?= quantityText($item['package_size']) ?> <?= h(meetingItemDisplayUnit($item)) ?>)<?php endif; ?></td>
+                        <td class="center"><?= h(meetingItemDisplayUnit($item)) ?></td>
+                        <td class="right"><?= quantityText(meetingItemDisplayQuantity($item)) ?></td>
+                        <td class="right"><?= money(meetingStoredTotal($item)) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <tr><td colspan="5"><strong>รวมเป็นเงิน</strong> -<?= h(meetingBahtText($offerTotal)) ?>-</td><td class="right"><strong><?= money($offerTotal) ?></strong></td></tr>
                 </tbody>
             </table>
             <?php endif; ?>

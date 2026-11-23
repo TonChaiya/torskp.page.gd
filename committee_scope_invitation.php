@@ -64,6 +64,26 @@ function filename_date(string $date): string
     return str_replace(['/', '\\'], '-', $date);
 }
 
+/** Format the meeting agenda date as "๑๙ เดือน ตุลาคม พ.ศ. ๒๕๖๙". */
+function committeeScopeAgendaDate(string $date): string
+{
+    $date = trim(arabic_digits($date));
+    if (preg_match('/^(\d{1,2})\s+(?:เดือน\s+)?([ก-๙]+)\s+(?:พ\.ศ\.\s*)?(\d{4})$/u', $date, $match)) {
+        return thai_digits($match[1] . ' เดือน ' . $match[2] . ' พ.ศ. ' . $match[3]);
+    }
+    return thai_digits($date);
+}
+
+/** Keep the agenda time in official form with the Thai "น." suffix. */
+function committeeScopeAgendaTime(string $time): string
+{
+    $time = trim(thai_digits($time));
+    if ($time === '' || preg_match('/น\.\s*$/u', $time)) {
+        return $time;
+    }
+    return $time . ' น.';
+}
+
 function committeeScopeWordFilename(string $memoNoSuffix, string $docDate, string $itemCount): string
 {
     return trim(
@@ -99,6 +119,7 @@ function committeeScopeWordHtml(array $data): string
             .garuda { width: auto; height: 1.5cm; }
             .memo-title { text-align: center; font-size: 29pt; font-weight: 700; line-height: 1; padding-top: 8pt; }
             .meta-line { margin-top: 3pt; line-height: 1; text-align: justify; text-justify: inter-character; -ms-text-justify: distribute; text-align-last: left; }
+            .department-line { white-space: nowrap; font-size: 14pt; letter-spacing: -0.25pt; }
             .memo-no-date { margin-top: 3pt; line-height: 1; white-space: nowrap; }
             .inline-label { display: inline; white-space: nowrap; font-size: 20pt; font-weight: 700; line-height: 1; margin-right: 8pt; }
             .memo-no-text { display: inline-block; width: 220pt; }
@@ -112,13 +133,15 @@ function committeeScopeWordHtml(array $data): string
             }
             .red { color: #c00000; }
             .agenda-title, .agenda-header { text-align: center; font-weight: 700; line-height: 1; }
-            .agenda-rule { width: 198pt; margin: 8pt auto 10pt; border-top: 0.5pt solid #111; }
+            .agenda-rule { width: 198pt; margin: 8pt auto 10pt; border-top: 0.5pt dashed #111; }
             .agenda-table { width: 100%; margin-top: 10pt; table-layout: fixed; }
             .agenda-table td { border: 0; padding: 0; vertical-align: top; }
             .agenda-label-cell { width: 112pt; font-weight: 700; white-space: nowrap; }
             .agenda-detail-cell { width: 340pt; }
             .agenda-topic { font-weight: 700; }
             .agenda-detail { margin-top: 2pt; text-align: justify; text-justify: inter-character; -ms-text-justify: distribute; text-align-last: left; }
+            .agenda-detail-line { display: block; }
+            .agenda-continuation { display: block; }
             .agenda-tail-line { border-top: 0.5pt solid #111; margin-top: 24pt; }
         </style>
     </head>
@@ -132,16 +155,17 @@ function committeeScopeWordHtml(array $data): string
                 </tr>
             </table>
 
-            <div class="meta-line"><span class="inline-label">ส่วนราชการ</span><?= h($data['department']) ?></div>
+            <div class="meta-line department-line"><span class="inline-label">ส่วนราชการ</span><?= h($data['department']) ?></div>
             <div class="memo-no-date">
-                <span class="inline-label">ที่</span><span class="memo-no-text">ชม ๕๑๐๐๖.๓๑/<?= h($data['memo_no_suffix']) ?></span>
+                <span class="inline-label">ที่</span><span class="memo-no-text">ชม ๕๑๐๐๖.๑๓.๑/<?= h($data['memo_no_suffix']) ?></span>
                 <span class="date-label-text">วันที่</span><span class="date-value-text"><?= h($data['doc_date']) ?></span>
             </div>
             <div class="meta-line"><span class="inline-label">เรื่อง</span><?= h($data['subject']) ?> <span class="red">จำนวน <?= h($data['item_count']) ?> รายการ</span> ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?></div>
             <div class="meta-line" style="margin-top:8pt;"><span class="inline-label">เรียน</span>คณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและราคากลาง</div>
 
-            <p style="margin-top:8pt;">ตามที่ท่านได้รับแต่งตั้งให้เป็นคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะขอบเขตและกำหนดราคากลาง สำหรับการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span> เพื่อสนับสนุนการให้บริการทางการแพทย์ รักษาพยาบาลประชาชนของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?> ตามบันทึกข้อความขออนุมัติในหลักการหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ที่ ชม ๕๑๐๐๖.๓๑/<?= h($data['principle_no_suffix']) ?> ลงวันที่ <span class="red"><?= h($data['principle_date']) ?></span> เพื่อให้การดำเนินงานตามโครงการดังกล่าว เป็นไปด้วยความเรียบร้อย จึงขอเชิญท่านซึ่งเป็นคณะกรรมการร่างขอบเขตและกำหนดราคากลาง เข้าร่วมประชุม เพื่อจัดหาการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ ในวันที่ <?= h($data['meeting_date']) ?> เวลา <?= h($data['meeting_time']) ?></span> ณ <?= h($data['location']) ?></p>
-            <p style="margin-top:6pt;">จึงเรียนมาเพื่อทราบ และเข้าร่วมประชุมตาม วัน เวลา และสถานที่ดังกล่าว</p>
+            <p style="margin-top:8pt;">ตามที่ท่านได้รับแต่งตั้งให้เป็นคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะขอบเขตและกำหนดราคากลาง สำหรับการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span> เพื่อสนับสนุนการให้บริการทางการแพทย์ รักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?> ตามบันทึกข้อความขออนุมัติในหลักการเพื่อดำเนินการจัดซื้อยา ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล ที่ ชม ๕๑๐๐๖.๑๓.๑/<?= h($data['principle_no_suffix']) ?> ลงวันที่ <span class="red"><?= h($data['principle_date']) ?></span></p>
+            <p style="margin-top:8pt;">เพื่อให้การดำเนินงานตามโครงการดังกล่าว เป็นไปด้วยความเรียบร้อย จึงขอเชิญท่านซึ่งเป็นคณะกรรมการร่างขอบเขตและกำหนดราคากลาง เข้าร่วมประชุมเพื่อจัดหาการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ ในวันที่ <?= h($data['meeting_date']) ?> เวลา <?= h($data['meeting_time']) ?></span> ณ <?= h($data['location']) ?></p>
+            <p style="margin-top:6pt;">จึงเรียนมาเพื่อทราบ และเข้าร่วมประชุมตามวัน เวลา และสถานที่ดังกล่าว</p>
 
             <div class="signature">
                 <div><?= h($data['signer_signature']) ?></div>
@@ -155,9 +179,9 @@ function committeeScopeWordHtml(array $data): string
             <div class="agenda-title">ระเบียบวาระการประชุม</div>
             <div class="agenda-header">
                 <div>คณะกรรมการร่างขอบเขตและกำหนดราคากลางเพื่อจัดหาการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span></div>
-                <div>เพื่อใช้ในการปฏิบัติงานของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพบ้านสันโค้ง</div>
+                <div>เพื่อใช้ในการปฏิบัติงานของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
                 <div>ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?></div>
-                <div>วันที่ <span class="red"><?= h($data['meeting_date']) ?></span> เวลา <span class="red"><?= h($data['meeting_time']) ?></span></div>
+                <div>วันที่ <span class="red"><?= h(committeeScopeAgendaDate($data['meeting_date'])) ?></span> เวลา <span class="red"><?= h(committeeScopeAgendaTime($data['meeting_time'])) ?></span></div>
                 <div>ณ&nbsp;&nbsp;<?= h($data['location']) ?></div>
             </div>
             <div class="agenda-rule"></div>
@@ -169,7 +193,7 @@ function committeeScopeWordHtml(array $data): string
                 </colgroup>
                 <tr>
                     <td class="agenda-label-cell">ระเบียบวาระที่ ๑</td>
-                    <td class="agenda-detail-cell"><div class="agenda-topic">เรื่อง&nbsp;&nbsp;ประธานแจ้งให้ที่ประชุมทราบ</div><div class="agenda-detail">ตามบันทึกข้อความขออนุมัติในหลักการหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ที่ ชม ๕๑๐๐๖.๓๑/<?= h($data['principle_no_suffix']) ?> ลงวันที่ <span class="red"><?= h($data['principle_date']) ?></span> เรื่อง ขออนุมัติในหลักการเพื่อดำเนินการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span> เพื่อใช้ในการปฏิบัติงานของหน่วยบริการประจำ ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?></div></td>
+                    <td class="agenda-detail-cell"><div class="agenda-topic">เรื่อง&nbsp;&nbsp;ประธานแจ้งให้ที่ประชุมทราบ</div><div class="agenda-detail"><div class="agenda-detail-line">ตามบันทึกข้อความศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div><div class="agenda-detail-line">ที่ชม ๕๑๐๐๖.๑๓.๑/<?= h($data['principle_no_suffix']) ?> ลงวันที่ <span class="red"><?= h($data['principle_date']) ?></span> เรื่อง ขออนุมัติในหลักการเพื่อดำเนินการ<span class="red">จัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span> เพื่อใช้สนับสนุนการให้บริการทางการแพทย์รักษาพยาบาลประชาชน ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?></div></div></td>
                 </tr>
                 <tr>
                     <td class="agenda-label-cell">ระเบียบวาระที่ ๒</td>
@@ -177,11 +201,11 @@ function committeeScopeWordHtml(array $data): string
                 </tr>
                 <tr>
                     <td class="agenda-label-cell">ระเบียบวาระที่ ๓</td>
-                    <td class="agenda-detail-cell"><div class="agenda-topic">เรื่อง&nbsp;&nbsp;พิจารณากำหนดร่างขอบเขตและกำหนดราคากลางเพื่อจัดหา</div><div class="agenda-detail"><span class="red">การจัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span> เพื่อใช้ในการปฏิบัติงานของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?></div></td>
+                    <td class="agenda-detail-cell"><div class="agenda-topic">เรื่อง&nbsp;&nbsp;พิจารณากำหนดร่างขอบเขตและกำหนดราคากลางเพื่อจัดหา</div><div class="agenda-detail"><div class="agenda-continuation"><span class="red">การจัดซื้อยา จำนวน <?= h($data['item_count']) ?> รายการ</span> เพื่อใช้ในการปฏิบัติงานของ</div><div class="agenda-continuation">ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div><div class="agenda-continuation">ประจำปีงบประมาณ พ.ศ. <?= h($data['fiscal_year']) ?></div></div></td>
                 </tr>
                 <tr>
                     <td class="agenda-label-cell">ระเบียบวาระที่ ๔</td>
-                    <td class="agenda-detail-cell"><div class="agenda-topic">เรื่อง&nbsp;&nbsp;อื่น ๆ (ถ้ามี)</div></td>
+                    <td class="agenda-detail-cell"><div class="agenda-topic">เรื่อง&nbsp;&nbsp;อื่นๆ (ถ้ามี)</div></td>
                 </tr>
             </table>
             <div class="agenda-tail-line"></div>
@@ -199,9 +223,9 @@ $caseOptions = procurementCases();
 $savedDocument = $activeCase ? procurementDocument((int) $activeCase['id'], 'committee_scope_invitation') : null;
 $savedExtra = is_array($savedDocument['extra'] ?? null) ? $savedDocument['extra'] : [];
 
-$department = 'กองสาธารณสุข หน่วยบริการประจำ รพ.สต.บ้านสันโค้ง อ.สันกำแพง โทร. ๐๕๓๓ ๑๓๖๒';
+$department = 'กองสาธารณสุข ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล อ.สันกำแพง โทร. ๐๕๓๓๓ ๑๓๖๒';
 $docDate = field('doc_date', (string) ($savedDocument['doc_date'] ?? ''));
-$subject = 'แจ้งคำสั่งและเชิญประชุมแต่งตั้งคณะกรรมการร่างขอบเขตและกำหนดราคากลาง เพื่อจัดซื้อยา';
+$subject = 'แจ้งคำสั่งและเชิญประชุมแต่งตั้งคณะกรรมการร่างขอบเขตและกำหนดราคากลาง เพื่อจัดซื้อยา ที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย';
 $itemCountValue = 0;
 if ($activeCase && is_array($activeCase['items'] ?? null)) {
     foreach ($activeCase['items'] as $item) {
@@ -220,9 +244,9 @@ $principleNoSuffix = $activeCase ? thai_digits((string) ($activeCase['principle_
 $principleDate = $activeCase ? thai_digits((string) ($activeCase['principle_doc_date'] ?? '')) : field('principle_date', '');
 $meetingDate = field('meeting_date', (string) ($savedExtra['meeting_date'] ?? ''));
 $meetingTime = field('meeting_time', (string) ($savedExtra['meeting_time'] ?? ''));
-$location = 'ห้องประชุมโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง อำเภอสันกำแพง จังหวัดเชียงใหม่';
+$location = 'ห้องประชุมศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล อำเภอสันกำแพง จังหวัดเชียงใหม่';
 $defaultSignerName = 'นางสาวชุตติภัทร เงินอินต๊ะ';
-$defaultSignerPosition = "เภสัชกรปฏิบัติการ\nประธานกรรมการกำหนดคุณลักษณะเฉพาะและราคากลาง";
+$defaultSignerPosition = "เภสัชกรปฏิบัติการ\nประธานคณะกรรมการร่างขอบเขตของงานฯ";
 $signerSignature = field('signer_signature', (string) ($savedExtra['signer_signature'] ?? ''));
 $signerName = $defaultSignerName;
 $signerPosition = $defaultSignerPosition;
@@ -233,7 +257,7 @@ if ($activeCase && !empty($activeCase['committee'][0]) && is_array($activeCase['
     if ($chairName !== '') {
         $signerName = thai_digits($chairName);
     }
-    $signerPosition = thai_digits(trim($chairPosition . "\nประธานกรรมการกำหนดคุณลักษณะเฉพาะและราคากลาง"));
+    $signerPosition = thai_digits(trim($chairPosition . "\nประธานคณะกรรมการร่างขอบเขตของงานฯ"));
 }
 
 $saveError = '';
@@ -312,6 +336,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
         .garuda { width: auto; height: 1.5cm; display: block; }
         .memo-title { font-size: 29pt; font-weight: 700; letter-spacing: 0; }
         .memo-line { font-size: 16pt; min-height: 1.05em; }
+        .department-text { white-space: nowrap; font-size: 14pt; letter-spacing: -0.25pt; min-width: 0; }
         .memo-label { font-size: 20pt; font-weight: 700; line-height: 1; white-space: nowrap; }
         .memo-text { font-size: 16pt; line-height: 1.2; }
         .document-stack { display: flex; flex-direction: column; gap: 12mm; }
@@ -329,11 +354,13 @@ if (($_POST['action'] ?? '') === 'save_document') {
         .agenda-page { line-height: 1.25; }
         .agenda-title { text-align: center; font-weight: 700; }
         .agenda-header { text-align: center; font-weight: 700; }
-        .agenda-rule { width: 7cm; margin: 0.25cm auto 0.35cm; border-top: 1px solid #111; }
+        .agenda-rule { width: 7cm; margin: 0.25cm auto 0.35cm; border-top: 1px dashed #111; }
         .agenda-row { display: grid; grid-template-columns: 4.7cm 1fr; gap: 0.35cm; margin-top: 0.35cm; }
         .agenda-label { font-weight: 700; white-space: nowrap; }
         .agenda-topic { font-weight: 700; }
         .agenda-detail { margin-top: 0.1cm; }
+        .agenda-detail-line { display: block; }
+        .agenda-continuation { display: block; }
         .agenda-tail-line { border-top: 1px solid #111; margin-top: 0.75cm; }
         @media print {
             html,
@@ -399,7 +426,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
                         <?php
                         $optionMemo = trim((string) ($caseOption['principle_memo_no_suffix'] ?? ''));
                         $optionDate = trim((string) ($caseOption['principle_doc_date'] ?? ''));
-                        $optionLabel = 'ชม.๕๑๐๐๖.๑๓.๑/' . $optionMemo . ' ลงวันที่ ' . $optionDate;
+                        $optionLabel = 'ชม ๕๑๐๐๖.๑๓.๑/' . $optionMemo . ' ลงวันที่ ' . $optionDate;
                         ?>
                         <option value="<?= (int) $caseOption['id'] ?>" <?= (int) $caseOption['id'] === (int) $caseId ? 'selected' : '' ?>><?= h($optionLabel) ?></option>
                     <?php endforeach; ?>
@@ -428,8 +455,8 @@ if (($_POST['action'] ?? '') === 'save_document') {
                 'meeting_date' => 'ลงวันที่เพื่อแจ้งกรรมการมาประชุม',
                 'meeting_time' => 'เวลาประชุม',
                 'signer_signature' => 'ลายเซ็นต์',
-                'signer_name' => 'ชื่อประธานกรรมการกำหนดคุณลักษณะ (อัตโนมัติ)',
-                'signer_position' => 'ตำแหน่งประธานกรรมการกำหนดคุณลักษณะ (อัตโนมัติ)',
+                'signer_name' => 'ชื่อประธานกรรมการร่างขอบเขต (อัตโนมัติ)',
+                'signer_position' => 'ตำแหน่งประธานกรรมการร่างขอบเขต (อัตโนมัติ)',
             ];
             $controlValues = [
                 'memo_no_suffix' => $memoNoSuffix,
@@ -472,11 +499,11 @@ if (($_POST['action'] ?? '') === 'save_document') {
 
             <div class="mt-1 grid grid-cols-[auto_1fr] items-end gap-x-2">
                 <div class="memo-label">ส่วนราชการ</div>
-                <div class="memo-line thai-justify"><?= h($department) ?></div>
+                <div class="memo-line department-text"><?= h($department) ?></div>
             </div>
             <div class="mt-1 grid grid-cols-[auto_1fr_auto_1fr] items-end gap-x-2">
                 <div class="memo-label">ที่</div>
-                <div class="memo-line">ชม ๕๑๐๐๖.๓๑/<span data-bind="memo_no_suffix"><?= h($memoNoSuffix) ?></span></div>
+                <div class="memo-line">ชม ๕๑๐๐๖.๑๓.๑/<span data-bind="memo_no_suffix"><?= h($memoNoSuffix) ?></span></div>
                 <div class="memo-label">วันที่</div>
                 <div class="memo-line text-center"><span data-bind="doc_date"><?= h($docDate) ?></span></div>
             </div>
@@ -491,14 +518,17 @@ if (($_POST['action'] ?? '') === 'save_document') {
 
             <p class="indent mt-4">
                 ตามที่ท่านได้รับแต่งตั้งให้เป็นคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะขอบเขตและกำหนดราคากลาง สำหรับการ<span class="red">จัดซื้อยา จำนวน <span data-bind="item_count"><?= h($itemCount) ?></span> รายการ</span>
-                เพื่อสนับสนุนการให้บริการทางการแพทย์ รักษาพยาบาลประชาชนของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?>
-                ตามบันทึกข้อความขออนุมัติในหลักการหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ที่ ชม ๕๑๐๐๖.๓๑/<span data-bind="principle_no_suffix"><?= h($principleNoSuffix) ?></span> ลงวันที่ <span class="red" data-bind="principle_date"><?= h($principleDate) ?></span>
+                เพื่อสนับสนุนการให้บริการทางการแพทย์ รักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?>
+                ตามบันทึกข้อความขออนุมัติในหลักการเพื่อดำเนินการจัดซื้อยา ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-bind="principle_no_suffix"><?= h($principleNoSuffix) ?></span> ลงวันที่ <span class="red" data-bind="principle_date"><?= h($principleDate) ?></span>
+            </p>
+
+            <p class="indent mt-4">
                 เพื่อให้การดำเนินงานตามโครงการดังกล่าว เป็นไปด้วยความเรียบร้อย จึงขอเชิญท่านซึ่งเป็นคณะกรรมการร่างขอบเขตและกำหนดราคากลาง เข้าร่วมประชุม
                 เพื่อจัดหาการ<span class="red">จัดซื้อยา จำนวน <span data-bind="item_count"><?= h($itemCount) ?></span> รายการ ในวันที่ <span data-bind="meeting_date"><?= h($meetingDate) ?></span> เวลา <span data-bind="meeting_time"><?= h($meetingTime) ?></span></span>
                 ณ <?= h($location) ?>
             </p>
 
-            <p class="indent mt-3">จึงเรียนมาเพื่อทราบ และเข้าร่วมประชุมตาม วัน เวลา และสถานที่ดังกล่าว</p>
+            <p class="indent mt-3">จึงเรียนมาเพื่อทราบ และเข้าร่วมประชุมตามวัน เวลา และสถานที่ดังกล่าว</p>
 
             <div class="signature">
                 <div class="signature-line" data-bind="signer_signature"><?= h($signerSignature) ?></div>
@@ -511,9 +541,9 @@ if (($_POST['action'] ?? '') === 'save_document') {
             <div class="agenda-title">ระเบียบวาระการประชุม</div>
             <div class="agenda-header">
                 <div>คณะกรรมการร่างขอบเขตและกำหนดราคากลางเพื่อจัดหาการ<span class="red">จัดซื้อยา จำนวน <span data-bind="item_count"><?= h($itemCount) ?></span> รายการ</span></div>
-                <div>เพื่อใช้ในการปฏิบัติงานของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพบ้านสันโค้ง</div>
+                <div>เพื่อใช้ในการปฏิบัติงานของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
                 <div>ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?></div>
-                <div>วันที่ <span class="red" data-bind="meeting_date"><?= h($meetingDate) ?></span> เวลา <span class="red" data-bind="meeting_time"><?= h($meetingTime) ?></span></div>
+                <div>วันที่ <span class="red" data-bind="meeting_date" data-agenda-date="1"><?= h(committeeScopeAgendaDate($meetingDate)) ?></span> เวลา <span class="red" data-bind="meeting_time" data-agenda-time="1"><?= h(committeeScopeAgendaTime($meetingTime)) ?></span></div>
                 <div>ณ&nbsp;&nbsp;<?= h($location) ?></div>
             </div>
             <div class="agenda-rule"></div>
@@ -523,11 +553,11 @@ if (($_POST['action'] ?? '') === 'save_document') {
                 <div>
                     <div class="agenda-topic">เรื่อง&nbsp;&nbsp;ประธานแจ้งให้ที่ประชุมทราบ</div>
                     <div class="agenda-detail thai-justify">
-                        ตามบันทึกข้อความขออนุมัติในหลักการหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง
-                        ที่ ชม ๕๑๐๐๖.๓๑/<span data-bind="principle_no_suffix"><?= h($principleNoSuffix) ?></span>
+                        <div class="agenda-detail-line">ตามบันทึกข้อความศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
+                        <div class="agenda-detail-line">ที่ชม ๕๑๐๐๖.๑๓.๑/<span data-bind="principle_no_suffix"><?= h($principleNoSuffix) ?></span>
                         ลงวันที่ <span class="red" data-bind="principle_date"><?= h($principleDate) ?></span>
                         เรื่อง ขออนุมัติในหลักการเพื่อดำเนินการ<span class="red">จัดซื้อยา จำนวน <span data-bind="item_count"><?= h($itemCount) ?></span> รายการ</span>
-                        เพื่อใช้ในการปฏิบัติงานของหน่วยบริการประจำ ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?>
+                        เพื่อใช้สนับสนุนการให้บริการทางการแพทย์รักษาพยาบาลประชาชน ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?></div>
                     </div>
                 </div>
             </div>
@@ -545,9 +575,9 @@ if (($_POST['action'] ?? '') === 'save_document') {
                 <div>
                     <div class="agenda-topic">เรื่อง&nbsp;&nbsp;พิจารณากำหนดร่างขอบเขตและกำหนดราคากลางเพื่อจัดหา</div>
                     <div class="agenda-detail thai-justify">
-                        <span class="red">การจัดซื้อยา จำนวน <span data-bind="item_count"><?= h($itemCount) ?></span> รายการ</span>
-                        เพื่อใช้ในการปฏิบัติงานของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง
-                        ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?>
+                        <div class="agenda-continuation"><span class="red">การจัดซื้อยา จำนวน <span data-bind="item_count"><?= h($itemCount) ?></span> รายการ</span> เพื่อใช้ในการปฏิบัติงานของ</div>
+                        <div class="agenda-continuation">ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
+                        <div class="agenda-continuation">ประจำปีงบประมาณ พ.ศ. <?= h($fiscalYear) ?></div>
                     </div>
                 </div>
             </div>
@@ -555,7 +585,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
             <div class="agenda-row">
                 <div class="agenda-label">ระเบียบวาระที่ ๔</div>
                 <div>
-                    <div class="agenda-topic">เรื่อง&nbsp;&nbsp;อื่น ๆ (ถ้ามี)</div>
+                    <div class="agenda-topic">เรื่อง&nbsp;&nbsp;อื่นๆ (ถ้ามี)</div>
                 </div>
             </div>
 
@@ -668,6 +698,12 @@ if (($_POST['action'] ?? '') === 'save_document') {
             document.querySelectorAll(`[data-bind="${input.dataset.field}"]`).forEach((target) => {
                 if (input.tagName === 'TEXTAREA') {
                     target.innerHTML = escapeHtml(value).replace(/\n/g, '<br>');
+                } else if (target.dataset.agendaTime === '1') {
+                    target.textContent = value && !/น\.\s*$/.test(value) ? `${value} น.` : value;
+                } else if (target.dataset.agendaDate === '1') {
+                    const normalized = arabicDigits(value).trim();
+                    const match = normalized.match(/^(\d{1,2})\s+(?:เดือน\s+)?([^\s]+)\s+(?:พ\.ศ\.\s*)?(\d{4})$/);
+                    target.textContent = match ? thaiDigits(`${match[1]} เดือน ${match[2]} พ.ศ. ${match[3]}`) : value;
                 } else {
                     target.textContent = value;
                 }
