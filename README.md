@@ -1,33 +1,39 @@
-# TOR SKP
+# TOR SKP — ระบบจัดทำเอกสารจัดซื้อยา
 
-ระบบจัดทำเอกสาร TOR ภาษาไทย ใช้ PHP 8.1 ขึ้นไป, MySQL/MariaDB, PDO และฐานข้อมูล `utf8mb4`.
+ระบบ PHP/MySQL สำหรับชุดเอกสารจัดซื้อเวชภัณฑ์ยา ภาษาไทย รองรับฟอร์มราชการ การจัดเก็บข้อมูลตามชุดจัดซื้อ การพิมพ์ PDF และดาวน์โหลด Word แยกรายหัวข้อหรือรวมทั้งชุด
 
-## ตั้งค่าฐานข้อมูล
+**Baseline v1.1.0 (24 พฤศจิกายน 2569)** — commit รุ่น `2d85b762a006864cb3d5090909097bcb65cdf81f`; main หลังนำ ZIP ออก `986c48cdcfe76116742a3a8cccffac2c0e75eef6`. หมายเลขรุ่นมาจากข้อความ commit ไม่ใช่ตัวแปร version ในโปรแกรม. Repository: [TonChaiya/torskp.page.gd](https://github.com/TonChaiya/torskp.page.gd).
 
-ระบบอ่านค่าการเชื่อมต่อจาก environment variables ต่อไปนี้ โดยมีค่าสำหรับ Laragon เป็นค่าเริ่มต้น:
+## เริ่มต้นอ่านสำหรับนักพัฒนาและ AI
 
-- `TOR_DB_HOST`
-- `TOR_DB_NAME`
-- `TOR_DB_USER`
-- `TOR_DB_PASS`
+| เอกสาร | ใช้เมื่อ |
+|---|---|
+| [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | กฎก่อนเริ่มแก้โค้ดและขอบเขตที่ต้องรักษา |
+| [PROJECT_STATUS](docs/PROJECT_STATUS.md) | สถานะจริงของรุ่น จุดที่ผ่าน และข้อจำกัด |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | โครงสร้างไฟล์, dependencies, จุดเริ่มอ่านแต่ละงาน |
+| [WORKFLOW](docs/WORKFLOW.md) | การส่งต่อข้อมูล 6 ขั้นตอน และ TOR |
+| [DATABASE](docs/DATABASE.md) | ตาราง, key, migration และ schema drift |
+| [WORD_EXPORT](docs/WORD_EXPORT.md) | Word/PDF, template, merge V4 และการจัดรูปแบบไทย |
+| [UI_GUIDELINES](docs/UI_GUIDELINES.md) | หน้าจอและหลักการ UI |
+| [DEVELOPMENT](docs/DEVELOPMENT.md) | สภาพแวดล้อม ทดสอบ และ release |
+| [SECURITY](docs/SECURITY.md) | บัญชี สิทธิ์ ความปลอดภัย และข้อมูลจริง |
+| [CHANGELOG](CHANGELOG.md) | ประวัติ Git และการเปลี่ยนแปลง |
+| [REPOSITORY_INVENTORY](docs/REPOSITORY_INVENTORY.md) | รายการไฟล์ที่ตรวจเทียบกับ Git baseline |
 
-ห้ามเก็บรหัสผ่านฐานจริงไว้ใน repository หรือไฟล์ที่เปิดผ่านเว็บได้
+## สภาพแวดล้อม
 
-## ติดตั้งฐานใหม่
+- Laragon บน Windows: `C:\laragon\www\torskp.page.gd`; URL ทดสอบที่ใช้ `http://torskp.page.gd.test:8081/` (ขึ้นกับการตั้งค่าของเครื่อง)
+- PHP ^8.1, PDO MySQL/MariaDB, UTF-8/utf8mb4_unicode_ci, Composer, PHPWord ^1.4 และ mPDF ^8.3 ตาม composer.json; เปิด json, mbstring, PDO/pdo_mysql, zip, DOM/XML และ extensions ที่ Composer ต้องการ
+- หน้าจอ PHP + Tailwind CDN บางหน้า + CSS/JS ภายในโครงการ; ไม่มีขั้น build frontend แยกที่กำหนดใน repository
+- `core/config.php` อ่าน `TOR_DB_HOST`, `TOR_DB_NAME`, `TOR_DB_USER`, `TOR_DB_PASS` จาก environment; fallback สำหรับ Laragon เท่านั้น. ห้ามบันทึกรหัสฐานจริงใน Git หรือไฟล์เปิดผ่านเว็บ
+- รัน `composer install --no-dev --optimize-autoloader` จาก root; ให้ PHP เขียน temp ได้. Microsoft Word Desktop ใช้ตรวจผล Word จริง; browser ใช้ Print/Save as PDF
 
-1. สร้างฐานข้อมูลโดยเลือก character set `utf8mb4` และ collation `utf8mb4_unicode_ci`
-2. นำเข้า `database/schema.sql` หากต้องการเฉพาะโครงสร้าง หรือใช้ไฟล์ full dump ที่ส่งมอบหากต้องการข้อมูลทั้งหมด
-3. ตั้งค่าการเชื่อมต่อฐานข้อมูลผ่าน environment variables
-4. รัน `composer install --no-dev --optimize-autoloader`
-5. บังคับใช้ HTTPS บนระบบจริง
+## ตั้งฐานใหม่ / อัปเกรดฐานเดิม
 
-บัญชีที่ย้ายมาจากฐานเดิมจะถูกบังคับให้เปลี่ยนรหัสผ่านที่ไม่ซ้ำชื่อผู้ใช้ก่อนใช้งานหน้าอื่น บัญชีใหม่ต้องใช้รหัสผ่านอย่างน้อย 6 ตัวอักษรและมีทั้งตัวอักษรกับตัวเลข
+**อ่าน [DATABASE.md](docs/DATABASE.md) ก่อนเสมอ:** schema.sql และ README เดิมมาจากรุ่นเก่า ไม่เพียงพอสำหรับติดตั้ง v1.1.0 แบบอัตโนมัติ. ตรวจ columns/constraints และ migration ที่ยังขาดก่อนใช้งาน. สำรองฐานและทดสอบบนฐานแยกก่อน; ห้าม import full dump ทับฐานที่ใช้งาน. บัญชีที่มีอยู่ต้องคงสถานะและรหัสผ่านเดิม; บัญชีที่สมัครใหม่ต้องได้รับ admin approval. Production ต้องใช้ HTTPS และป้องกันไฟล์ SQL, config, storage, vendor ที่ไม่ควรเปิดจากเว็บ.
 
-## อัปเกรดฐานเดิม
+## เส้นทางใช้งาน
 
-สำรองฐานก่อนเสมอ แล้วรัน Migration ตามลำดับดังนี้
+เข้าสู่ระบบ → เลือก/สร้างชุดจัดซื้อพร้อมบริษัท → 1 อนุมัติหลักการ → 2 เชิญกรรมการ → 3 TOR → 4 อนุมัติคุณลักษณะและราคากลาง → 5 รายงานผล → 6 รายงานประชุม → ประวัติ → รวม Word ของชุดนั้น. หน้าจัดการบัญชีอยู่ `change_password.php`; หลังบ้านยา/ราคา/ผู้ลงนามอยู่ `admin.php`.
 
-1. `database/migrations/20260821_security_hardening.sql` เพิ่มชนิดข้อมูล JSON, foreign key, check constraint, role, login throttling และ audit log
-2. `database/migrations/20260821_document_signer_defaults.sql` เพิ่มค่าเริ่มต้นชื่อและตำแหน่งผู้เสนอ/ผู้อนุมัติสำหรับบันทึกขออนุมัติในหลักการ
-
-Migration ทั้งสองไฟล์ไม่แก้เนื้อหาเอกสาร TOR และออกแบบให้รันซ้ำได้โดยไม่สร้างข้อมูลซ้ำ
+เอกสารชุดนี้เป็นคู่มือ handoff; ไม่เปลี่ยนโค้ดหรือฐานข้อมูล และไม่รับรองการติดตั้งใหม่จนกว่าจะแก้ schema drift ที่ระบุ. เมื่อมี commit ใหม่ให้อัปเดต baseline และเฉพาะคู่มือที่ได้รับผลกระทบ.
