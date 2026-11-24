@@ -6,7 +6,8 @@ requireLogin();
 
 function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
-// Keep the original workflow routes, their order, and availability unchanged.
+// Visual sequence: step 3 TOR comes before step 4 scope/price approval.
+// Do not change any route, case ID handling, or backend dependencies.
 $workflows = [
     [
         'title' => 'จัดซื้อยาในบัญชี GPO',
@@ -19,8 +20,8 @@ $workflows = [
         'documents' => [
             ['title' => 'บันทึกข้อความ ขออนุมัติในหลักการ', 'href' => 'principle_approval_memo.php'],
             ['title' => 'บันทึกข้อความ แจ้งคำสั่งและเชิญประชุมแต่งตั้งคณะกรรมการร่างขอบเขต และวาระการประชุม', 'href' => 'committee_scope_invitation.php'],
-            ['title' => 'บันทึกข้อความ ขออนุมัติใช้รายละเอียดคุณลักษณะเฉพาะและราคากลาง', 'href' => 'scope_price_approval_memo.php'],
             ['title' => 'เอกสาร TOR', 'href' => 'tor_company_purchase.php', 'note' => 'ออกเอกสาร TOR จัดซื้อผ่านบริษัท'],
+            ['title' => 'บันทึกข้อความ ขออนุมัติใช้รายละเอียดคุณลักษณะเฉพาะและราคากลาง', 'href' => 'scope_price_approval_memo.php'],
             ['title' => 'บันทึกข้อความ รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะ', 'href' => 'committee_scope_result_memo.php'],
             ['title' => 'รายงานการประชุม', 'href' => 'meeting_report.php'],
         ],

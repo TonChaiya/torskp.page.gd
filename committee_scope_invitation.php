@@ -345,7 +345,7 @@ if (($_POST['action'] ?? '') === 'word') {
         'signer_name' => $signerName,
         'signer_position' => $signerPosition,
     ];
-    $wordFilename = committeeScopeWordFilename($memoNoSuffix, $docDate, $itemCount);
+    $wordFilename = torDocumentFilename($caseId, 2, $docDate, $memoNoSuffix, (string)($activeCase['supplier_name'] ?? ''));
     try {
         outputCommitteeScopeInvitationDocx($wordData, $wordFilename);
     } catch (Throwable $primaryError) {
@@ -476,13 +476,14 @@ if (($_POST['action'] ?? '') === 'save_document') {
             }
         }
     </style>
+<link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="docws docws-invitation-page min-h-screen bg-zinc-950 text-zinc-100">
 <?php require __DIR__ . '/components/navbar.php'; ?>
 <?php require __DIR__ . '/components/workflow_steps.php'; ?>
 
-<main class="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-    <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
+<main class="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_420px] docws-layout" data-docws-layout="1">
+    <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain docws-editor-pane" data-docws-editor="1">
         <div class="mb-4 flex items-center justify-between gap-3">
             <h1 class="text-lg font-semibold">ข้อมูลเอกสาร</h1>
             <div class="flex flex-wrap gap-2">
@@ -502,7 +503,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
                         <?php
                         $optionMemo = trim((string) ($caseOption['principle_memo_no_suffix'] ?? ''));
                         $optionDate = trim((string) ($caseOption['principle_doc_date'] ?? ''));
-                        $optionLabel = 'ชม ๕๑๐๐๖.๑๓.๑/' . $optionMemo . ' ลงวันที่ ' . $optionDate;
+                        $optionLabel = 'ชม ๕๑๐๐๖.๑๓.๑/' . $optionMemo . ' ลงวันที่ ' . $optionDate . ' · ' . torCaseSupplierLabel($caseOption);
                         ?>
                         <option value="<?= (int) $caseOption['id'] ?>" <?= (int) $caseOption['id'] === (int) $caseId ? 'selected' : '' ?>><?= h($optionLabel) ?></option>
                     <?php endforeach; ?>
@@ -586,7 +587,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
         </form>
     </aside>
 
-    <section class="document-stack order-1 overflow-auto">
+    <section class="document-stack order-1 overflow-auto docws-preview-pane" data-docws-preview="1">
         <article class="memo-page">
             <div class="grid grid-cols-[3cm_1fr_3cm] items-start">
                 <img src="picture/picture-1.png" alt="" class="garuda">
@@ -897,5 +898,10 @@ if (($_POST['action'] ?? '') === 'save_document') {
 })();
 </script>
 
+<script defer src="assets/document-workspace.js?v=20261124-1"></script>
+<script src="assets/tor-document-print-name.js?v=20261124-1"></script>
+<script>
+window.TorDocumentPrintName.init(<?= json_encode(['step'=>2,'caseId'=>$caseId,'supplier'=>(string)($activeCase['supplier_name'] ?? ''),'dateField'=>'doc_date','numberField'=>'memo_no_suffix'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+</script>
 </body>
 </html>

@@ -38,9 +38,7 @@ function scopeApprovalMoney($value): string {
 }
 function scopeApprovalDate($value): string { return scopeApprovalThai(trim((string)$value)); }
 function scopeApprovalFilename(array $values): string {
-    $number = trim(scopeApprovalThai((string)($values['memo_no_suffix'] ?? '')));
-    $number = $number === '' ? 'ยังไม่ระบุ' : $number;
-    return 'ชุดเอกสาร ๓ ขออนุมัติใช้คุณลักษณะและราคากลาง เลขที่ ' . $number . '.docx';
+    return torDocumentFilename((int)($values['_filename_case_id'] ?? 0), 4, (string)($values['doc_date'] ?? ''), (string)($values['memo_no_suffix'] ?? ''), (string)($values['_filename_supplier'] ?? ''));
 }
 function scopeApprovalCss(bool $forBrowser = false): string {
     // Keep original Word-export CSS, but only shared typography in the browser.
@@ -613,7 +611,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
     if ($error === '' && ($_POST['action'] ?? '') === 'word') {
         try {
-            scopeApprovalOutputTemplateWord($values);
+            $wordValues = $values;
+            $wordValues['_filename_case_id'] = $caseId;
+            $wordValues['_filename_supplier'] = (string)($activeCase['supplier_name'] ?? '');
+            scopeApprovalOutputTemplateWord($wordValues);
         } catch (Throwable $e) {
             error_log('Scope approval Word export failed: '.$e->getMessage());
             $error = 'สร้าง Word ไม่สำเร็จ กรุณาตรวจสอบ templates/docx/scope_price_approval_memo.docx และ PHP ZipArchive';
@@ -701,17 +702,18 @@ $groups = [
   .scope-preview .scope-page {page:scopeMemo;font-family:'ScopeMemoA4','TH Sarabun New',sans-serif!important;font-size:16pt!important;}
   .scope-preview .scope-sectitle u {text-decoration-line:underline!important;text-decoration-color:#111!important;text-decoration-thickness:1pt!important;text-underline-offset:1pt!important;}
 }
-</style></head>
-<body class="bg-slate-100 text-slate-900">
+</style><link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
+</head>
+<body class="docws docws-scope-page bg-slate-100 text-slate-900">
 <div class="no-print"><?php require __DIR__.'/components/navbar.php'; require __DIR__.'/components/workflow_steps.php'; ?></div>
 <header class="no-print mx-auto max-w-7xl px-4 pt-5"><h1 class="text-xl font-bold">๓. ขออนุมัติใช้รายละเอียดคุณลักษณะเฉพาะและราคากลาง</h1><p class="scope-caption">เอกสารใหม่แยกจากเอกสารอื่นของชุดงาน · ข้อมูลส่วนข้อความปรับแก้ได้ · Word ใช้แม่แบบ DOCX ต้นฉบับโดยตรง</p></header>
 <?php if (!$activeCase): ?>
-<main class="mx-auto max-w-2xl px-4 py-12"><form method="get" class="rounded-xl bg-white p-6 shadow"><h2 class="mb-3 font-bold">เลือกชุดเอกสารก่อนเริ่ม</h2><select name="case_id" class="w-full rounded-md border border-slate-300 p-3" required><option value="">-- เลือกชุดเอกสาร --</option><?php foreach($cases as $c): ?><option value="<?= (int)$c['id'] ?>"><?= scopeApprovalH($c['title']) ?></option><?php endforeach ?></select><button class="scope-btn mt-3 w-full">เปิดแบบฟอร์ม</button></form></main>
+<main class="mx-auto max-w-2xl px-4 py-12"><form method="get" class="rounded-xl bg-white p-6 shadow"><h2 class="mb-3 font-bold">เลือกชุดเอกสารก่อนเริ่ม</h2><select name="case_id" class="w-full rounded-md border border-slate-300 p-3" required><option value="">-- เลือกชุดเอกสาร --</option><?php foreach($cases as $c): ?><option value="<?= (int)$c['id'] ?>"><?= scopeApprovalH($c['title'] . ' · ' . torCaseSupplierLabel($c)) ?></option><?php endforeach ?></select><button class="scope-btn mt-3 w-full">เปิดแบบฟอร์ม</button></form></main>
 <?php else: ?>
-<div class="scope-layout">
-<div class="scope-preview" id="scope-preview"><?= scopeApprovalRender($values) ?></div>
-<aside class="scope-editor no-print">
-<form method="get" style="margin-bottom:15px"><label>ชุดเอกสาร <select name="case_id" onchange="this.form.submit()"><?php foreach ($cases as $c): ?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===$caseId?'selected':'' ?>><?= scopeApprovalH($c['title']) ?></option><?php endforeach ?></select></label></form>
+<div class="scope-layout docws-layout" data-docws-layout="1">
+<div class="scope-preview docws-preview-pane" id="scope-preview" data-docws-preview="1"><?= scopeApprovalRender($values) ?></div>
+<aside class="scope-editor no-print docws-editor-pane" data-docws-editor="1">
+<form method="get" style="margin-bottom:15px"><label>ชุดเอกสาร <select name="case_id" onchange="this.form.submit()"><?php foreach ($cases as $c): ?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===$caseId?'selected':'' ?>><?= scopeApprovalH($c['title'] . ' · ' . torCaseSupplierLabel($c)) ?></option><?php endforeach ?></select></label></form>
 <?php if (isset($_GET['saved'])): ?><div class="mb-3 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">บันทึกเอกสารเรียบร้อยแล้ว</div><?php endif ?>
 <?php if ($error !== ''): ?><div class="mb-3 rounded-md bg-red-50 p-3 text-sm text-red-700"><?= scopeApprovalH($error) ?></div><?php endif ?>
 <form id="scope-form" method="post"><input type="hidden" name="case_id" value="<?= $caseId ?>"><input type="hidden" name="csrf_token" value="<?= scopeApprovalH(csrfToken()) ?>">
@@ -815,5 +817,10 @@ function refresh(){
 }
 form.addEventListener('input',refresh);form.addEventListener('change',refresh);refresh();
 })();
+</script>
+<script defer src="assets/document-workspace.js?v=20261124-1"></script>
+<script src="assets/tor-document-print-name.js?v=20261124-1"></script>
+<script>
+window.TorDocumentPrintName.init(<?= json_encode(['step'=>4,'caseId'=>$caseId,'supplier'=>(string)($activeCase['supplier_name'] ?? ''),'dateField'=>'doc_date','numberField'=>'memo_no_suffix'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
 </script>
 </body></html>

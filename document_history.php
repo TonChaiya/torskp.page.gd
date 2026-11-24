@@ -48,8 +48,8 @@ if (($_POST['action'] ?? '') === 'delete_selection') {
 $documentSteps = [
     'principle_approval' => ['short' => 'อนุมัติหลักการ', 'label' => 'บันทึกข้อความ ขออนุมัติในหลักการ', 'page' => 'principle_approval_memo.php'],
     'committee_scope_invitation' => ['short' => 'เชิญกรรมการ', 'label' => 'แจ้งคำสั่งและเชิญประชุม', 'page' => 'committee_scope_invitation.php'],
-    'scope_price_approval_memo' => ['short' => 'อนุมัติใช้ TOR', 'label' => 'ขออนุมัติคุณลักษณะและราคากลาง', 'page' => 'scope_price_approval_memo.php'],
     'tor_company_purchase' => ['short' => 'เอกสาร TOR', 'label' => 'เอกสาร TOR', 'page' => 'tor_company_purchase.php'],
+    'scope_price_approval_memo' => ['short' => 'อนุมัติใช้ TOR', 'label' => 'ขออนุมัติคุณลักษณะและราคากลาง', 'page' => 'scope_price_approval_memo.php'],
     'committee_scope_result_memo' => ['short' => 'รายงานผล', 'label' => 'รายงานผลการพิจารณา', 'page' => 'committee_scope_result_memo.php'],
     'meeting_report' => ['short' => 'รายงานประชุม', 'label' => 'รายงานการประชุม', 'page' => 'meeting_report.php'],
 ];
@@ -83,19 +83,21 @@ foreach (procurementCases() as $case) {
     $memoNo = trim((string) ($case['principle_memo_no_suffix'] ?? ''));
     $docDate = trim((string) ($case['principle_doc_date'] ?? ''));
     $caseTitle = trim((string) ($case['title'] ?? ''));
+    $supplierName = trim((string)($fullCase['supplier_name'] ?? ''));
     $label = 'ชม.๕๑๐๐๖.๑๓.๑/' . ($memoNo !== '' ? $memoNo : '—');
     $caseRows[] = [
         'id' => $caseId,
         'label' => $label,
         'doc_date' => $docDate,
         'title' => $caseTitle,
+        'supplier_name' => $supplierName,
         'items_count' => count($items),
         'item_names' => $itemNames,
         'completion' => $completion,
         'completed_count' => $completedCount,
         'next_step' => $nextStep,
         'delete_options' => $deleteOptions,
-        'search' => historySearchText(implode(' ', [$label, $memoNo, $docDate, $caseTitle, (string) $caseId, implode(' ', $itemNames)])),
+        'search' => historySearchText(implode(' ', [$label, $memoNo, $docDate, $caseTitle, $supplierName, (string) $caseId, implode(' ', $itemNames)])),
     ];
 }
 $totalCases = count($caseRows);
@@ -112,11 +114,11 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="ค้นหาและจัดการประวัติชุดเอกสาร TOR">
     <title>ประวัติเอกสาร | TOR Report</title>
-    <link rel="stylesheet" href="assets/history-blue.css?v=20261124-1">
+    <link rel="stylesheet" href="assets/history-blue.css?v=20261124-bundle2">
 </head>
 <body class="torskp-history-body">
 <?php require __DIR__ . '/components/navbar.php'; ?>
-<main class="history-workspace" id="main-content">
+<main class="history-workspace" id="main-content" data-bundle-csrf="<?= h(csrfToken()) ?>">
     <header class="history-head">
         <div class="history-head-copy">
             <span class="history-eyebrow">DOCUMENT HISTORY</span>
@@ -144,7 +146,7 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
                 <label class="history-search-label" for="history-search"><span class="sr-only">ค้นหาชุดเอกสาร</span>
                     <span aria-hidden="true" class="history-search-icon">⌕</span>
                     <input id="history-search" type="search" name="search" autocomplete="off"
-                        value="<?= h($historySearch) ?>" placeholder="ค้นหาเลขที่หนังสือ วันที่ ชื่อยา...">
+                        value="<?= h($historySearch) ?>" placeholder="ค้นหาเลขที่หนังสือ วันที่ บริษัท หรือชื่อยา...">
                 </label>
                 <label class="history-status-label" for="history-status"><span class="sr-only">กรองสถานะ</span>
                     <select id="history-status"><option value="all">ทุกสถานะ</option><option value="progress">กำลังดำเนินการ</option><option value="complete">ครบ ๖ ขั้นตอน</option></select>
@@ -169,6 +171,7 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
                     <div class="history-case-main">
                         <div class="history-case-number"><span class="history-dot" aria-hidden="true"></span><strong><?= h($row['label']) ?></strong><span class="history-case-date"><?= $row['doc_date'] !== '' ? 'วันที่ ' . h($row['doc_date']) : 'ยังไม่ระบุวันที่' ?></span></div>
                         <?php if ($row['title'] !== ''): ?><div class="history-case-title"><?= h($row['title']) ?></div><?php endif; ?>
+                        <div class="history-case-details-line"><span>บริษัท: <?= h($row['supplier_name'] !== '' ? $row['supplier_name'] : 'ยังไม่ระบุ') ?></span></div>
                         <div class="history-case-details-line">
                             <span><?= h(historyThaiDigits((string) $row['items_count'])) ?> รายการยา</span>
                             <?php if ($row['item_names']): ?><span class="history-medicine-preview" title="<?= h(implode(', ', $row['item_names'])) ?>"><?= h(implode(', ', array_slice($row['item_names'], 0, 3))) ?><?= count($row['item_names']) > 3 ? ' และอื่น ๆ' : '' ?></span><?php endif; ?>
@@ -180,6 +183,14 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
                     </div>
                     <div class="history-row-actions">
                         <a href="<?= h($continueHref) ?>" class="history-continue"><?= $done ? 'เปิดชุดเอกสาร' : 'ทำต่อ' ?><span aria-hidden="true">↗</span></a>
+                        <button type="button" class="history-bundle-button" data-merge-word
+                            data-case-id="<?= (int) $id ?>"
+                            data-complete="<?= $done ? '1' : '0' ?>"
+                            data-case-name="<?= h($row['supplier_name'] !== '' ? $row['supplier_name'] : 'ยังไม่ระบุบริษัท') ?>"
+                            aria-describedby="merge-status-<?= (int) $id ?>"
+                            title="<?= $done ? 'รวม Word ทั้ง 6 ขั้นตอน' : 'ยังบันทึกไม่ครบ 6 ขั้นตอน' ?>">
+                            <span class="history-bundle-label">รวม Word</span>
+                        </button>
                         <details class="history-case-expand"><summary>ทุกหัวข้อ <span aria-hidden="true">⌄</span></summary>
                             <div class="history-step-list">
                                 <div class="history-step-heading">เปิดเอกสารรายหัวข้อ</div>
@@ -197,6 +208,7 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
                                     data-delete-options="<?= h((string) json_encode($row['delete_options'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>">ลบเอกสารในชุดนี้...</button>
                             </div>
                         </details>
+                        <span id="merge-status-<?= (int) $id ?>" class="history-bundle-status" role="status" aria-live="polite" hidden></span>
                     </div>
                 </article>
             <?php endforeach; ?>
@@ -224,6 +236,8 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
         <div class="history-modal-actions"><button type="button" id="cancel_delete" class="history-modal-cancel">ยกเลิก</button><button type="submit" id="confirm_delete" class="history-modal-submit" disabled>ยืนยันการลบ</button></div>
     </form>
 </dialog>
+<script src="assets/history-docx-merge.js?v=20261124-bundle4" defer></script>
+<script src="assets/history-bundle.js?v=20261124-bundle2" defer></script>
 <script>
 (() => {
     'use strict';

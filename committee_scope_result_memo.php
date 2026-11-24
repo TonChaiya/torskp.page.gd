@@ -154,7 +154,7 @@ if (($_POST['action'] ?? '') === 'word_document') {
     elseif (!$history) $error = 'ยังไม่พบ TOR ของชุดเอกสารนี้ กรุณาบันทึก TOR ก่อน';
     else {
         require_once __DIR__ . '/core/word_export_lib.php';
-        $name = 'รายงานผลการพิจารณา เลขที่ ' . thaiMemoDigits(trim($memoNo) !== '' ? trim($memoNo) : 'ยังไม่ระบุ') . '.docx';
+        $name = torDocumentFilename($caseId, 5, $docDate, $memoNo, (string)($case['supplier_name'] ?? ''));
         try {
             outputWordHtml(committeeResultDocumentHtml($values, $memoNo, $docDate, $committee, true), $name, committeeResultWordCss(), 'principle');
         } catch (Throwable $wordError) {
@@ -315,28 +315,44 @@ if (($_POST['action'] ?? '') === 'word_document') {
     .memo-sheet:last-child { break-after:auto; page-break-after:auto; }
   }
 </style>
+<link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
+<style>
+/* Result memo screen-only refinement. Printing and Word export remain unchanged. */
+@media screen {
+  body.result-memo-app .result-top {align-items:center;margin-bottom:8px;min-height:0;}
+  body.result-memo-app .result-top .result-title {font-size:17px!important;margin:0!important;line-height:1.35;}
+  body.result-memo-app .result-preview-title-line {display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0;}
+  body.result-memo-app .result-preview-title-line h2 {font-size:13px!important;}
+  body.result-memo-app .result-preview-hint {font-size:11px!important;}
+  body.result-memo-app .result-preview-toolbar {margin-left:auto;}
+  body.result-memo-app .result-form-actions {padding:9px 12px!important;}
+  body.result-memo-app .result-command-row {display:flex;align-items:center;justify-content:flex-start;gap:7px;flex-wrap:wrap;}
+  body.result-memo-app .result-command-row > button {
+    display:inline-flex!important;align-items:center;justify-content:center;
+    flex:0 1 auto!important;width:auto!important;max-width:100%!important;
+    min-height:34px!important;padding:7px 11px!important;
+    border-radius:8px!important;font-size:12px!important;font-weight:700!important;
+    line-height:1.35!important;white-space:normal!important;
+  }
+  body.result-memo-app .result-command-row .result-primary-button {background:#155ba0!important;color:#fff!important;}
+  body.result-memo-app .result-command-row .result-primary-button:disabled {background:#94a3b8!important;}
+  body.result-memo-app .result-dirty-state:empty {display:none;}
+  body.result-memo-app .result-dirty-state:not(:empty) {margin-top:6px!important;}
+}
+</style>
 </head>
-<body class="result-memo-app">
+<body class="docws docws-result-page result-memo-app">
 <div class="no-print"><?php require __DIR__.'/components/navbar.php'; require __DIR__.'/components/workflow_steps.php'; ?></div>
 <main class="result-layout">
   <header class="result-top no-print">
-    <div>
-      <div class="result-eyebrow">ขั้นตอนที่ 4 / 5 · ระบบจัดทำเอกสาร TOR</div>
-      <h1 class="result-title">บันทึกข้อความ รายงานผลการพิจารณาฯ</h1>
-      <p class="result-subtitle">ตรวจข้อมูลโครงการและผลการพิจารณา แล้วดูตัวอย่างเอกสาร 2 หน้าได้ทันที</p>
-    </div>
-    <nav class="result-top-links" aria-label="เมนูเอกสาร">
-      <a class="result-link" href="index.php">หน้าแรก</a>
-      <a class="result-link" href="document_history.php">ประวัติเอกสาร</a>
-      <?php if ($case): ?><a class="result-link" href="meeting_report.php?case_id=<?= $caseId ?>">ไปขั้นตอนที่ 5</a><?php endif; ?>
-    </nav>
+    <h1 class="result-title">บันทึกข้อความ · รายงานผลการพิจารณาฯ</h1>
   </header>
   <?php if ($case): ?>
-  <div class="result-workspace">
-    <section class="result-preview-column" id="memo-preview" aria-label="ตัวอย่างบันทึกข้อความ">
+  <div class="result-workspace docws-layout" data-docws-layout="1">
+    <section class="result-preview-column docws-preview-pane" id="memo-preview" aria-label="ตัวอย่างบันทึกข้อความ" data-docws-preview="1">
       <div class="result-preview-heading no-print">
-        <div><h2>ตัวอย่างเอกสาร</h2><div class="result-preview-hint">A4 · 2 หน้า · ปรับตามข้อมูลที่กรอก (ต้องกดบันทึกเพื่อจัดเก็บ)</div></div>
-        <div class="result-preview-toolbar"><button type="button" class="result-small-button" id="result-preview-zoom" aria-pressed="false">ขนาดจริง</button><button type="submit" form="memo-form" name="action" value="word_document" class="result-small-button" <?= !$history?'disabled':'' ?>>ดาวน์โหลด Word</button><button type="button" class="result-small-button" onclick="window.print()">พิมพ์ / PDF</button></div>
+        <div class="result-preview-title-line"><h2>ตัวอย่างเอกสาร</h2><span class="result-preview-hint">A4 · ๒ หน้า</span></div>
+        <div class="result-preview-toolbar"><button type="button" class="result-small-button" id="result-preview-zoom" aria-pressed="false" aria-label="สลับขนาดพรีวิว">ขนาดจริง</button></div>
       </div>
       <div class="result-preview-stage" id="result-preview-stage">
         <div class="result-document-stack" id="result-document-stack">
@@ -344,7 +360,7 @@ if (($_POST['action'] ?? '') === 'word_document') {
         </div>
       </div>
     </section>
-    <aside class="result-editor-column no-print" aria-label="แผงกรอกข้อมูลเอกสาร">
+    <aside class="result-editor-column no-print docws-editor-pane" aria-label="แผงกรอกข้อมูลเอกสาร" data-docws-editor="1">
       <div class="result-editor-shell">
         <div class="result-editor-head"><h2>ข้อมูลเอกสาร</h2><p>กรอกข้อมูลหลักก่อน ส่วนข้อความและผู้ลงนามเปิดแก้ได้ตามต้องการ</p></div>
         <div class="result-case-select">
@@ -352,7 +368,7 @@ if (($_POST['action'] ?? '') === 'word_document') {
             <label for="case_id" class="result-field-label">ชุดเอกสารจัดซื้อ</label>
             <select id="case_id" name="case_id" class="result-input" aria-label="เลือกชุดเอกสารจัดซื้อ">
               <option value="0">-- เลือกโครงการ --</option>
-              <?php foreach ($caseOptions as $choice): ?><option value="<?= (int)$choice['id'] ?>" <?= (int)$choice['id']===$caseId?'selected':'' ?>>#<?= (int)$choice['id'] ?> — <?=h((string)$choice['title'])?></option><?php endforeach ?>
+              <?php foreach ($caseOptions as $choice): ?><option value="<?= (int)$choice['id'] ?>" <?= (int)$choice['id']===$caseId?'selected':'' ?>>#<?= (int)$choice['id'] ?> — <?=h((string)$choice['title'] . ' · ' . torCaseSupplierLabel($choice))?></option><?php endforeach ?>
             </select>
           </form>
           <div class="result-facts"><span class="result-fact">ปีงบประมาณ พ.ศ. <?= h($caseFiscalYear !== '' ? $caseFiscalYear : 'ยังไม่ระบุ') ?></span><span class="result-fact">รายการยา <?=h($count)?> รายการ</span><span class="result-fact">อ้างอิงหนังสือแต่งตั้ง <?=h($invNo!==''?$invNo:'ยังไม่ระบุ')?></span></div>
@@ -422,9 +438,12 @@ if (($_POST['action'] ?? '') === 'word_document') {
               <label class="result-field-label">ตำแหน่งผู้ลงนาม<textarea class="result-input" name="second_signer_position" rows="3"><?=h($values['second_signer_position'])?></textarea></label>
             </div>
           </details>
-          <div class="result-form-actions">
-            <button type="submit" class="result-primary-button" <?= !$history?'disabled title="ต้องบันทึก TOR ขั้นตอนที่ 3 ก่อน"':'' ?>>บันทึกเอกสารหัวข้อ 4</button>
-            <div class="result-secondary-actions"><button type="submit" name="action" value="word_document" class="result-action" <?= !$history?'disabled':'' ?>>ดาวน์โหลด Word</button><button type="button" class="result-action" onclick="window.print()">พิมพ์ / PDF</button></div>
+          <div class="result-form-actions" aria-label="คำสั่งเอกสาร">
+            <div class="result-command-row">
+              <button type="submit" class="result-primary-button" <?= !$history?'disabled title="ต้องบันทึก TOR ก่อน"':'' ?>>บันทึกเอกสาร</button>
+              <button type="submit" name="action" value="word_document" class="result-action" <?= !$history?'disabled':'' ?>>ดาวน์โหลด Word</button>
+              <button type="button" class="result-action" onclick="window.print()">พิมพ์ / PDF</button>
+            </div>
             <p class="result-dirty-state" id="result-dirty-state" role="status" aria-live="polite"></p>
           </div>
         </form>
@@ -433,7 +452,7 @@ if (($_POST['action'] ?? '') === 'word_document') {
   </div>
   <?php else: ?>
     <div class="result-empty no-print"><h2>เลือกชุดเอกสารเพื่อเริ่มต้น</h2><p>กรุณาเลือกโครงการจากรายการด้านล่าง</p>
-      <form method="get" action="committee_scope_result_memo.php" style="max-width:520px;margin:18px auto 0;text-align:left;"><label class="result-field-label" for="empty-case-select">ชุดเอกสารจัดซื้อ</label><select id="empty-case-select" name="case_id" class="result-input" required><option value="">-- เลือกโครงการ --</option><?php foreach($caseOptions as $choice): ?><option value="<?= (int)$choice['id'] ?>">#<?= (int)$choice['id'] ?> — <?= h((string)$choice['title']) ?></option><?php endforeach ?></select><button class="result-primary-button" style="margin-top:12px;" type="submit">เปิดชุดเอกสาร</button></form>
+      <form method="get" action="committee_scope_result_memo.php" style="max-width:520px;margin:18px auto 0;text-align:left;"><label class="result-field-label" for="empty-case-select">ชุดเอกสารจัดซื้อ</label><select id="empty-case-select" name="case_id" class="result-input" required><option value="">-- เลือกโครงการ --</option><?php foreach($caseOptions as $choice): ?><option value="<?= (int)$choice['id'] ?>">#<?= (int)$choice['id'] ?> — <?= h((string)$choice['title'] . ' · ' . torCaseSupplierLabel($choice)) ?></option><?php endforeach ?></select><button class="result-primary-button" style="margin-top:12px;" type="submit">เปิดชุดเอกสาร</button></form>
     </div>
   <?php endif; ?>
 </main>
@@ -625,5 +644,10 @@ if (($_POST['action'] ?? '') === 'word_document') {
 })();
 </script>
 
+<script defer src="assets/document-workspace.js?v=20261124-1"></script>
+<script src="assets/tor-document-print-name.js?v=20261124-1"></script>
+<script>
+window.TorDocumentPrintName.init(<?= json_encode(['step'=>5,'caseId'=>$caseId,'supplier'=>(string)($case['supplier_name'] ?? ''),'dateField'=>'doc_date','numberField'=>'memo_no_suffix'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+</script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/scope_price_approval_store.php';
+require_once __DIR__ . '/document_filename.php';
 
 function ensureProcurementTables(): void
 {
@@ -15,7 +16,7 @@ function ensureTorHistoriesCaseColumn(): void
 function procurementCases(): array
 {
     ensureProcurementTables();
-    return db()->query('SELECT id, title, principle_memo_no_suffix, principle_doc_date, updated_at, created_at FROM procurement_cases ORDER BY updated_at DESC, id DESC')->fetchAll();
+    return db()->query('SELECT id, title, supplier_name, principle_memo_no_suffix, principle_doc_date, updated_at, created_at FROM procurement_cases ORDER BY updated_at DESC, id DESC')->fetchAll();
 }
 
 function procurementCase(int $caseId): ?array
@@ -118,8 +119,15 @@ function saveProcurementCase(array $data): int
     $itemsJson = json_encode(array_values($data['items'] ?? []), JSON_UNESCAPED_UNICODE);
     $committeeJson = json_encode(array_values($data['committee'] ?? []), JSON_UNESCAPED_UNICODE);
     $title = (string) ($data['title'] ?? ('จัดซื้อยา ' . date('Y-m-d H:i')));
+    $supplierName = trim((string) ($data['supplier_name'] ?? ''));
+    if ($caseId > 0 && !array_key_exists('supplier_name', $data)) {
+        $oldCase = procurementCase($caseId);
+        $supplierName = (string) ($oldCase['supplier_name'] ?? '');
+    }
+    if (preg_match_all('/./us', $supplierName) > 255) throw new InvalidArgumentException('ชื่อบริษัทต้องไม่เกิน 255 ตัวอักษร');
     $params = [
         $title,
+        $supplierName,
         (string) ($data['fiscal_year'] ?? ''),
         (string) ($data['plan_approved_date'] ?? ''),
         (string) ($data['budget_amount'] ?? ''),
@@ -138,7 +146,7 @@ function saveProcurementCase(array $data): int
     if ($caseId > 0) {
         $stmt = db()->prepare("
             UPDATE procurement_cases
-            SET title = ?, fiscal_year = ?, plan_approved_date = ?, budget_amount = ?, budget_amount_text = ?,
+            SET title = ?, supplier_name = ?, fiscal_year = ?, plan_approved_date = ?, budget_amount = ?, budget_amount_text = ?,
                 network_count = ?, principle_memo_no_suffix = ?, principle_doc_date = ?,
                 signer_name = ?, signer_position = ?, director_name = ?, director_position = ?,
                 items_json = ?, committee_json = ?
@@ -150,11 +158,11 @@ function saveProcurementCase(array $data): int
 
     $stmt = db()->prepare("
         INSERT INTO procurement_cases (
-            title, fiscal_year, plan_approved_date, budget_amount, budget_amount_text,
+            title, supplier_name, fiscal_year, plan_approved_date, budget_amount, budget_amount_text,
             network_count, principle_memo_no_suffix, principle_doc_date,
             signer_name, signer_position, director_name, director_position,
             items_json, committee_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->execute($params);
     return (int) db()->lastInsertId();

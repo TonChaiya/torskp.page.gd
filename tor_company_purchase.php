@@ -161,6 +161,21 @@ function normalizeNumberInput($value): string
     return trim(str_replace([',', ' '], '', $value));
 }
 
+// Allocated budget is independent of the computed purchase/offer total.
+const TOR_DEFAULT_ALLOCATED_BUDGET = '6000000.00';
+function torNormalizeAllocatedBudget($value): ?string
+{
+    if (!is_string($value) && !is_int($value) && !is_float($value)) return null;
+    $value = trim(arabicDigits((string) $value));
+    if (!preg_match('/^(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]{1,2})?$/D', $value)) return null;
+    $value = str_replace(',', '', $value);
+    [$whole, $fraction] = array_pad(explode('.', $value, 2), 2, '');
+    $whole = ltrim($whole, '0');
+    if ($whole === '') $whole = '0';
+    if (strlen($whole) > 12) return null;
+    return $whole . '.' . str_pad($fraction, 2, '0');
+}
+
 function arabicDigits($value): string
 {
     return strtr((string) $value, [
@@ -560,21 +575,47 @@ function reportItems(array $medicines, array $procurementCases = []): array
     return $items;
 }
 
+// Optional TOR-only metadata: an explicit empty string is a saved choice.
+function torOptionalNumber($value, bool $year = false): ?string
+{
+    if (!is_string($value) && !is_int($value)) return null;
+    $text = trim(arabicDigits((string) $value));
+    if ($text === '') return '';
+    return preg_match($year ? '/^[0-9]{4}$/D' : '/^[0-9]{1,4}$/D', $text) ? $text : null;
+}
+
 function torFiscalYearForCase(array $cases, int $caseId): string
 {
     foreach ($cases as $case) {
         if ((int) ($case['id'] ?? 0) === $caseId) {
             $year = trim((string) ($case['fiscal_year'] ?? ''));
-            return $year !== '' ? thaiDigits($year) : '................';
+            return torOptionalNumber($year, true) ?? '';
         }
     }
-    return '................';
+    return '';
+}
+
+// TOR-only display choice; older cases without this key use reference prices.
+function torPriceBasis($value): string
+{
+    return $value === 'offer' ? 'offer' : 'reference';
 }
 
 function reportHtml(array $report): string
 {
     $refTotal = array_sum(array_column($report['items'], 'reference_total'));
     $offerTotal = array_sum(array_column($report['items'], 'offer_total'));
+    $useOfferPrice = torPriceBasis($report['price_basis'] ?? null) === 'offer';
+    $section7Total = $useOfferPrice ? $offerTotal : $refTotal;
+    $section7Label = $useOfferPrice ? 'ราคาเสนอรวม' : 'ราคากลาง';
+    $section7TotalLabel = $useOfferPrice ? 'รวมราคาเสนอทั้งสิ้น' : 'รวมราคากลางทั้งสิ้น';
+    $allocatedBudget = (float) (torNormalizeAllocatedBudget($report['allocated_budget'] ?? null) ?? TOR_DEFAULT_ALLOCATED_BUDGET);
+    $revision = torOptionalNumber($report['budget_revision'] ?? '1') ?? '';
+    $fiscalYear = torOptionalNumber($report['fiscal_year'] ?? '', true) ?? '';
+    $budgetPlanParts = [];
+    if ($revision !== '') $budgetPlanParts[] = 'ปรับปรุงครั้งที่ ' . thaiDigits($revision);
+    if ($fiscalYear !== '') $budgetPlanParts[] = 'ปีงบประมาณ ' . thaiDigits($fiscalYear);
+    $budgetPlanText = $budgetPlanParts ? ' ' . implode(' ', $budgetPlanParts) : '';
     $hasPackageItems = count(array_filter(
         $report['items'],
         static fn(array $item): bool => (float) ($item['package_size'] ?? 0) > 0
@@ -660,14 +701,14 @@ function reportHtml(array $report): string
         <button class="no-print" onclick="window.print()">พิมพ์ผ่านเบราว์เซอร์</button>
 
         <div class="page">
-            <h1>รายละเอียดคุณลักษณะของพัสดุที่จะซื้อหรือจ้าง<br>ตามระเบียบกระทรวงการคลังว่าด้วยการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ. 2560<br>งานจัดซื้อเวชภัณฑ์ยาของหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง</h1>
+            <h1>รายละเอียดคุณลักษณะของพัสดุที่จะซื้อหรือจ้าง<br>ตามระเบียบกระทรวงการคลังว่าด้วยการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ. 2560<br>งานจัดซื้อเวชภัณฑ์ยาของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</h1>
             <div class="stars">******************************</div>
 
             <div class="section-title">1. หลักการและเหตุผล</div>
-            <p>ด้วยหน่วยบริการประจำโรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง จะดำเนินการจัดซื้อยา                       ในบัญชียาหลักแห่งชาติ เพื่อสนับสนุนการให้บริการรักษาประชาชน ของหน่วยบริการประจำและ                 เครือข่ายปฐมภูมิจำนวน 5 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่ ตามแผนงบประมาณเงินบำรุง โรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง ปรับปรุงครั้งที่ 1 ปีงบประมาณ <?= h((string) ($report['fiscal_year'] ?? '................')) ?> หมวดค่าเวชภัณฑ์ยา ตั้งไว้ 2,000,000.00 บาท ( สองล้านบาทถ้วน )</p>
+            <p>ด้วยศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล จะดำเนินการจัดซื้อยาในบัญชียาหลักแห่งชาติและยานอกบัญชียาหลักแห่งชาติ เพื่อสนับสนุนการให้บริการรักษาประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิจำนวน 10 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่<?= h($budgetPlanText) ?> โดยมีวงเงินงบประมาณทั้งสิ้น <?= money($allocatedBudget) ?> บาท (<?= h(thaiBahtText($allocatedBudget)) ?>)</p>
 
             <div class="section-title">2. วัตถุประสงค์</div>
-            <p>สำหรับใช้ในการให้บริการรักษาพยาบาลผู้ป่วย เพื่อให้ยาเพียงพอ พร้อมใช้ มีคุณภาพต่อการให้บริการประชาชนของหน่วยบริการประจำและเครือข่ายปฐมภูมิจำนวน 5 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่</p>
+            <p>สำหรับใช้ในการให้บริการรักษาพยาบาลผู้ป่วย เพื่อให้ยาเพียงพอ พร้อมใช้ มีคุณภาพต่อการให้บริการประชาชนของหน่วยบริการประจำและเครือข่ายปฐมภูมิจำนวน 10 แห่ง อำเภอสันกำแพง จังหวัดเชียงใหม่ สังกัดองค์การบริหารส่วนจังหวัดเชียงใหม่</p>
 
             <div class="section-title">3. คุณสมบัติผู้เสนอราคา</div>
             <div class="subindent">3.1 มีความสามารถตามกฎหมายกำหนด</div>
@@ -679,7 +720,7 @@ function reportHtml(array $report): string
 และการบริหารพัสดุภาครัฐกำหนดในราชกิจจานุเบกษา
 </div>
             <div class="subindent">3.7 เป็นบุคคลธรรมดาหรือนิติบุคคลผู้มีอาชีพขายพัสดุดังกล่าว</div>
-            <div class="subindent">3.8 ไม่เป็นผู้มีผลประโยชน์ร่วมกันกับผู้ยื่นข้อเสนอรายอื่นที่เข้ายื่นข้อเสนอให้แก่ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล ณ วันประกาศประกวดราคาอิเล็กทรอนิกส์ครั้งนี้</div>
+            <div class="subindent">3.8 ไม่เป็นผู้มีผลประโยชน์ร่วมกันกับผู้ยื่นข้อเสนอรายอื่นที่เข้ายื่นข้อเสนอให้แก่ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล ณ วันที่ยื่นข้อเสนอราคาครั้งนี้</div>
             <div class="subindent">3.9 ไม่เป็นผู้รับเอกสิทธิ์หรือความคุ้มกัน ซึ่งอาจปฏิเสธไม่ยอมขึ้นศาลไทย เว้นแต่รัฐบาลของผู้ยื่นข้อเสนอได้มีคำสั่งให้สละเอกสิทธิ์และความคุ้มกันเช่นว่านั้น</div>
 
             <div class="signature">
@@ -774,15 +815,15 @@ function reportHtml(array $report): string
             <p class="subindent" <?= $torFlowAttributes ?>>6.ผู้เสนอราคา(ผู้ขาย) ต้องรับเปลี่ยนยาเมื่อใกล้หมดอายุ หรือเมื่อเกิดการเสื่อมสภาพด้วยประการใดๆ ก่อนกำหนด โดยไม่มีเงื่อนไข</p>
 
             <div class="section-title">4) เงื่อนไขอื่น ๆ</div>
-            <p class="subindent" <?= $torFlowAttributes ?>>4.1 ในการเสนอราคาให้เสนอราคาเป็นเงินบาท และเสนอราคาได้เพียงครั้งเดียวและราคาเดียว โดยเสนอต่อรายการ</p>
-            <p class="subindent" <?= $torFlowAttributes ?>>4.2 ในการเสนอราคา กำหนดยืนราคาภายใน 30 วัน นับตั้งแต่วันยื่นเสนอราคาโดยภายในกำหนดยืนราคา ผู้เสนอราคาต้องรับผิดชอบราคาที่ตนเสนอไว้ และจะถอนการเสนอราคามิได้</p>
-            <p class="subindent" <?= $torFlowAttributes ?>>4.3 กรณีพัสดุที่จะซื้อจัดจ้างหรือส่งมอบในการจัดจ้างครั้งนี้ หากแม้ผู้ขาย/คู่สัญญาเป็นผู้ประกอบการวิสาหกิจขนาดกลางหรือขนาดย่อม (SMEs) ให้ผู้ขาย-คู่สัญญาแสดงหรือการขึ้นทะเบียนฯ ด้วย (ถ้ามี)</p>
+            <p class="subindent" <?= $torFlowAttributes ?>>1. ในการเสนอราคาให้เสนอราคาเป็นเงินบาท และเสนอราคาได้เพียงครั้งเดียวและราคาเดียว โดยเสนอต่อรายการ</p>
+            <p class="subindent" <?= $torFlowAttributes ?>>2. ในการเสนอราคา กำหนดยืนราคาภายใน 30 วัน นับตั้งแต่วันยื่นเสนอราคาโดยภายในกำหนดยืนราคา ผู้เสนอราคาต้องรับผิดชอบราคาที่ตนเสนอไว้ และจะถอนการเสนอราคามิได้</p>
+            <p class="subindent" <?= $torFlowAttributes ?>>3. กรณีพัสดุที่จะซื้อจัดจ้างหรือส่งมอบในการจัดจ้างครั้งนี้ หากแม้ผู้ขาย/คู่สัญญาเป็นผู้ประกอบการวิสาหกิจขนาดกลางหรือขนาดย่อม (SMEs) ให้ผู้ขาย-คู่สัญญาแสดงหรือการขึ้นทะเบียนฯ ด้วย (ถ้ามี)</p>
             
             <div class="section-title">5) ระยะเวลาส่งมอบของ</div>
-            <p <?= $torFlowAttributes ?>>ผู้ขายต้องส่งมอบของ ภายใน <span class="red">30 วันทำการ</span> นับจากวันที่ได้รับใบสั่งซื้อ</p>
+            <p <?= $torFlowAttributes ?>>ผู้ขายต้องส่งมอบของ ภายใน <span class="red">30 วันทำการ (สามสิบวัน)</span> นับจากวันที่ได้รับใบสั่งซื้อ</p>
 
             <div class="section-title">6) เกณฑ์ในการพิจารณาผลการยื่นข้อเสนอ</div>
-            <p <?= $torFlowAttributes ?>>ในการพิจารณาผลการยื่นข้อเสนอครั้งนี้ โรงพยาบาลส่งเสริมสุขภาพตำบลบ้านสันโค้ง จะพิจารณาตัดสินโดยใช้ แนวทางปฏิบัติตามหนังสือคณะกรรมการวินิจฉัยปัญหา จัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ กรมบัญชีกลาง ที่ กค (กวจ) 0405.2/ว 119 ลงวันที่ 12 มีนาคม 2562 ข้อ 3.1.1 ให้หน่วยงานของรัฐจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มิใช่ยาซึ่งองค์การเภสัชกรรมหรือสภากาชาดไทยได้ผลิตออกจำหน่ายแล้ว โดยวิธีเฉพาะเจาะจงจากองค์การเภสัชกรรมหรือสภากาชาดไทย เว้นแต่หน่วยงานในสังกัดกระทรวงกลาโหมให้จัดซื้อจากโรงงานเภสัชกรรมทหารสำหรับหน่วยงานในสังกัดสำนักงานตำรวจแห่งชาติจะซื้อจากองค์การเภสัชกรรมหรือโรงงานเภสัชกรรมทหารก็ได้ ทั้งนี้ หน่วยงานของรัฐสามารถจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มีใช่ยาจากผู้ขายรายอื่นได้หากองค์การเภสัชกรรม สภากาชาดไทย หรือโรงงานเภสัชกรรมทหาร ไม่สามารถผลิตออกจำหน่ายให้แก่หน่วยงานของรัฐได้ทันกำหนดตามที่หน่วยงาน ของรัฐได้แจ้งแผนประจำปีล่วงหน้า</p>
+            <p <?= $torFlowAttributes ?>>ในการพิจารณาผลการยื่นข้อเสนอครั้งนี้ ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลจะพิจารณาตัดสินโดยใช้ แนวทางปฏิบัติตามหนังสือคณะกรรมการวินิจฉัยปัญหา จัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ กรมบัญชีกลาง ที่ กค (กวจ) 0405.2/ว 119 ลงวันที่ 12 มีนาคม 2562 ข้อ 3.1.1 ให้หน่วยงานของรัฐจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มิใช่ยาซึ่งองค์การเภสัชกรรมหรือสภากาชาดไทยได้ผลิตออกจำหน่ายแล้ว โดยวิธีเฉพาะเจาะจงจากองค์การเภสัชกรรมหรือสภากาชาดไทย เว้นแต่หน่วยงานในสังกัดกระทรวงกลาโหมให้จัดซื้อจากโรงงานเภสัชกรรมทหารสำหรับหน่วยงานในสังกัดสำนักงานตำรวจแห่งชาติจะซื้อจากองค์การเภสัชกรรมหรือโรงงานเภสัชกรรมทหารก็ได้ ทั้งนี้ หน่วยงานของรัฐสามารถจัดซื้อยาที่อยู่ในบัญชียาหลักแห่งชาติหรือเวชภัณฑ์ที่มีใช่ยาจากผู้ขายรายอื่นได้หากองค์การเภสัชกรรม สภากาชาดไทย หรือโรงงานเภสัชกรรมทหาร ไม่สามารถผลิตออกจำหน่ายให้แก่หน่วยงานของรัฐได้ทันกำหนดตามที่หน่วยงาน ของรัฐได้แจ้งแผนประจำปีล่วงหน้า</p>
             </div>
 
             <div class="signature">
@@ -808,7 +849,7 @@ function reportHtml(array $report): string
             <div class="center word-inline-page-number" style="page-break-before: always; break-before: page;">- <?= $pageNo++ ?> -</div>
             <?php if ($chunkIndex === 0): ?>
                 <div class="section-title">7) ราคากลางและแหล่งที่มาของราคากลาง</div>
-                <p class="price-note">ราคากลาง จำนวน <?= money($offerTotal) ?> บาท โดยมีแหล่งที่มาของราคากลาง ดังนี้</p>
+                <p class="price-note"><?= h($section7Label) ?> จำนวน <?= money($section7Total) ?> บาท (<?= h(thaiBahtText($section7Total)) ?>) โดยมีแหล่งที่มาของราคากลาง ดังนี้</p>
                 <p><?= nl2br(h($report['price_source'])) ?></p>
             <?php else: ?>
                 <!-- continuation page: do not repeat section title, only table header -->
@@ -819,7 +860,7 @@ function reportHtml(array $report): string
                     <th style="width: 6%"><?= $hasPackageItems ? 'ที่' : 'ลำดับ' ?></th>
                     <th>รายการยา</th>
                     <th style="width: 12%">ราคากลาง</th>
-                    <th style="width: 12%">ราคาเสนอ</th>
+                    <?php if ($useOfferPrice): ?><th style="width: 12%">ราคาเสนอ</th><?php endif; ?>
                     <th style="width: <?= $hasPackageItems ? '10%' : '11%' ?>">จำนวน</th>
                     <th style="width: <?= $hasPackageItems ? '21%' : '11%' ?>"><?= $hasPackageItems ? 'ขนาดบรรจุ/หน่วยนับ' : 'หน่วยนับ' ?></th>
                     <th style="width: 15%"><?= $hasPackageItems ? 'มูลค่า' : 'มูลค่ารวม' ?></th>
@@ -833,7 +874,7 @@ function reportHtml(array $report): string
                     <td class="center"><?= $i + 1 ?></td>
                     <td><?= h($item['medicine']['name']) ?></td>
                     <td class="right"><?= money($item['reference_price']) ?></td>
-                    <td class="right"><?= money($item['offer_price']) ?></td>
+                    <?php if ($useOfferPrice): ?><td class="right"><?= money($item['offer_price']) ?></td><?php endif; ?>
                     <td class="right"><?= h(quantityNumber($item['quantity'])) ?></td>
                     <td class="center">
                         <?php if (($item['package_size'] ?? 0) > 0): ?>
@@ -842,13 +883,13 @@ function reportHtml(array $report): string
                             <?= h($item['medicine']['unit']) ?>
                         <?php endif; ?>
                     </td>
-                    <td class="right"><?= money($item['offer_total']) ?></td>
+                    <td class="right"><?= money($useOfferPrice ? $item['offer_total'] : $item['reference_total']) ?></td>
                 </tr>
                 <?php endforeach; ?>
                 <?php if ($isLastChunk): ?>
                 <tr>
-                    <td colspan="6" class="center">รวมราคาเสนอทั้งสิ้น</td>
-                    <td class="right"><?= money($offerTotal) ?></td>
+                    <td colspan="<?= $useOfferPrice ? 6 : 5 ?>" class="center"><?= h($section7TotalLabel) ?></td>
+                    <td class="right"><?= money($section7Total) ?></td>
                 </tr>
                 <?php endif; ?>
                 </tbody>
@@ -867,7 +908,7 @@ function reportHtml(array $report): string
             <?php else: ?>
                 <!-- Last chunk: render remaining sections inline so they continue on this page if space allows -->
                 <div class="section-title">8) วงเงินงบประมาณ/วงเงินที่ได้รับจัดสรร</div>
-                <p>วงเงินงบประมาณราคากลางรวม จำนวน <?= money($offerTotal) ?> บาท ( <?= h(thaiBahtText($offerTotal)) ?> ) โดยเบิกจ่ายจากงบประมาณเงินบำรุงของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล วงเงินงบประมาณทั้งสิ้น 2,000,000.00 บาท ( <?= h(thaiBahtText(2000000)) ?> )</p>
+                <p>โดยเบิกจ่ายจากงบประมาณเงินบำรุงของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล วงเงินงบประมาณทั้งสิ้น <?= money($allocatedBudget) ?> บาท ( <?= h(thaiBahtText($allocatedBudget)) ?> )</p>
 
                 <div class="section-title">9) เงื่อนไขการชำระเงิน</div>
                 <p>ผู้ซื้อตกลงชำระเงินให้แก่ผู้ขาย จำนวน 1 งวด เมื่อผู้ซื้อได้รับมอบสิ่งของและคณะกรรมการตรวจรับพัสดุได้ตรวจรับสิ่งของที่ส่งมอบถูกต้องครบถ้วนตามสัญญาแล้ว</p>
@@ -909,13 +950,51 @@ function outputBrowserPrint(string $html): void
 
 $error = '';
 $packageValidationError = '';
-$data = ['medicines' => [], 'drafts' => [], 'committee_sets' => []];
+$data = ['medicines' => [], 'drafts' => [], 'committee_sets' => [], 'histories' => [], 'procurement_cases' => [], 'procurement_documents' => []];
 
 try {
     $data = loadData();
 } catch (Throwable $e) {
     $error = 'ยังเชื่อมต่อฐานข้อมูลไม่ได้ กรุณาสร้างฐานข้อมูลด้วย schema.sql และตรวจค่าใน config.php';
 }
+
+// Reuse the existing TOR document's extra_json; no schema change is required.
+$torBudgetRows = [];
+$torPriceBasisRows = [];
+$torExtraRows = [];
+foreach ($data['procurement_documents'] as $torRow) {
+    if (($torRow['document_type'] ?? '') !== 'tor_company_purchase') continue;
+    $torRowCaseId = (int) ($torRow['case_id'] ?? 0);
+    if ($torRowCaseId <= 0) continue;
+    $extra = json_decode((string) ($torRow['extra_json'] ?? ''), true);
+    $torExtraRows[$torRowCaseId] = is_array($extra) ? $extra : [];
+    $torBudgetRows[$torRowCaseId] = torNormalizeAllocatedBudget($torExtraRows[$torRowCaseId]['allocated_budget'] ?? null) ?? TOR_DEFAULT_ALLOCATED_BUDGET;
+    $torPriceBasisRows[$torRowCaseId] = torPriceBasis($torExtraRows[$torRowCaseId]['price_basis'] ?? null);
+}
+$torBudgetCaseId = (int) ($_POST['case_id'] ?? $_GET['case_id'] ?? 0);
+$torSelectedPriceBasis = torPriceBasis($_POST['tor_price_basis'] ?? ($torPriceBasisRows[$torBudgetCaseId] ?? 'reference'));
+$torBudgetFallback = $torBudgetRows[$torBudgetCaseId] ?? TOR_DEFAULT_ALLOCATED_BUDGET;
+$torBudgetRaw = $_POST['tor_allocated_budget'] ?? $torBudgetFallback;
+$torAllocatedBudget = torNormalizeAllocatedBudget($torBudgetRaw);
+$torBudgetInvalid = $torAllocatedBudget === null;
+$torAllocatedBudget = $torAllocatedBudget ?? $torBudgetFallback;
+$torPlanRows = [];
+foreach ($data['procurement_cases'] as $torCase) {
+    $planCaseId = (int) ($torCase['id'] ?? 0);
+    $planExtra = $torExtraRows[$planCaseId] ?? [];
+    $torPlanRows[$planCaseId] = [
+        'revision' => torOptionalNumber($planExtra['budget_revision'] ?? '1') ?? '1',
+        'year' => torOptionalNumber($planExtra['tor_fiscal_year'] ?? ($torCase['fiscal_year'] ?? ''), true) ?? '',
+    ];
+}
+$torPlanFallback = $torPlanRows[$torBudgetCaseId] ?? ['revision' => '1', 'year' => ''];
+$torRevisionRaw = $_POST['tor_budget_revision'] ?? $torPlanFallback['revision'];
+$torYearRaw = $_POST['tor_fiscal_year'] ?? $torPlanFallback['year'];
+$torRevision = torOptionalNumber($torRevisionRaw);
+$torYear = torOptionalNumber($torYearRaw, true);
+$torPlanInvalid = $torRevision === null || $torYear === null;
+$torRevision = $torRevision ?? $torPlanFallback['revision'];
+$torYear = $torYear ?? $torPlanFallback['year'];
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
     $action = post('action');
@@ -962,7 +1041,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
     if ($action === 'save_report') {
         $caseId = (int) post('case_id');
         $items = reportItems($data['medicines'], $data['procurement_cases']);
-        if ($packageValidationError !== '') {
+        if ($torBudgetInvalid) {
+            $error = 'กรุณากรอกวงเงินงบประมาณที่ได้รับจัดสรรเป็นจำนวนเงินที่ถูกต้อง (ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง)';
+        } elseif ($torPlanInvalid) {
+            $error = 'กรุณากรอกครั้งที่ปรับปรุงเป็นตัวเลข 1–4 หลัก และปีงบประมาณเป็นตัวเลข 4 หลัก หรือเว้นว่าง';
+        } elseif ($packageValidationError !== '') {
             $error = $packageValidationError;
         } elseif (!$items) {
             $error = 'กรุณาเลือกยาอย่างน้อย 1 รายการ';
@@ -977,9 +1060,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
                 $historyId = saveTorHistory($committee, $items, $priceSource, $caseId);
             }
             if ($caseId > 0) {
-                saveProcurementDocument($caseId, 'tor_company_purchase', '', '', [
-                    'history_id' => $historyId,
-                ]);
+                $torExtra = $torExtraRows[$caseId] ?? [];
+                $torExtra['history_id'] = $historyId;
+                $torExtra['allocated_budget'] = $torAllocatedBudget;
+                $torExtra['budget_revision'] = $torRevision;
+                $torExtra['tor_fiscal_year'] = $torYear;
+                $torExtra['price_basis'] = $torSelectedPriceBasis;
+                saveProcurementDocument($caseId, 'tor_company_purchase', '', trim(post('tor_doc_date')), $torExtra);
             }
         }
         if ($error === '') {
@@ -990,25 +1077,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
 
     if ($action === 'report') {
         $items = reportItems($data['medicines'], $data['procurement_cases']);
-        if ($packageValidationError !== '') {
+        if ($torBudgetInvalid) {
+            $error = 'กรุณากรอกวงเงินงบประมาณที่ได้รับจัดสรรเป็นจำนวนเงินที่ถูกต้อง (ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง)';
+        } elseif ($torPlanInvalid) {
+            $error = 'กรุณากรอกครั้งที่ปรับปรุงเป็นตัวเลข 1–4 หลัก และปีงบประมาณเป็นตัวเลข 4 หลัก หรือเว้นว่าง';
+        } elseif ($packageValidationError !== '') {
             $error = $packageValidationError;
         } elseif (!$items) {
             $error = 'กรุณาเลือกยาอย่างน้อย 1 รายการ';
         } else {
             $committee = [post('committee_1'), post('committee_2'), post('committee_3')];
             $priceSource = post('price_source');
-            outputBrowserPrint(thaiDocxVisibleHtml(reportHtml([
+            $printHtml = thaiDocxVisibleHtml(reportHtml([
                 'committee' => $committee,
                 'items' => $items,
                 'price_source' => $priceSource,
-                'fiscal_year' => torFiscalYearForCase($data['procurement_cases'], (int) post('case_id')),
-            ])));
+                'allocated_budget' => $torAllocatedBudget,
+                'budget_revision' => $torRevision,
+                'fiscal_year' => $torYear,
+                'price_basis' => $torSelectedPriceBasis,
+            ]));
+            $printCaseId = (int)post('case_id');
+            $printCase = $printCaseId > 0 ? procurementCase($printCaseId) : null;
+            $printName = torDocumentFilename($printCaseId, 3, post('tor_doc_date'), '', (string)($printCase['supplier_name'] ?? ''), 'pdf');
+            $printHtml = preg_replace('~<title>[^<]*</title>~u', '<title>' . htmlspecialchars($printName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</title>', $printHtml, 1) ?? $printHtml;
+            outputBrowserPrint($printHtml);
         }
     }
 
     if ($action === 'word') {
         $items = reportItems($data['medicines'], $data['procurement_cases']);
-        if ($packageValidationError !== '') {
+        if ($torBudgetInvalid) {
+            $error = 'กรุณากรอกวงเงินงบประมาณที่ได้รับจัดสรรเป็นจำนวนเงินที่ถูกต้อง (ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง)';
+        } elseif ($torPlanInvalid) {
+            $error = 'กรุณากรอกครั้งที่ปรับปรุงเป็นตัวเลข 1–4 หลัก และปีงบประมาณเป็นตัวเลข 4 หลัก หรือเว้นว่าง';
+        } elseif ($packageValidationError !== '') {
             $error = $packageValidationError;
         } elseif (!$items) {
             $error = 'กรุณาเลือกยาอย่างน้อย 1 รายการ';
@@ -1020,10 +1123,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
                 'committee' => $committee,
                 'items' => $items,
                 'price_source' => $priceSource,
-                'fiscal_year' => torFiscalYearForCase($data['procurement_cases'], $caseId),
+                'allocated_budget' => $torAllocatedBudget,
+                'budget_revision' => $torRevision,
+                'fiscal_year' => $torYear,
+                'price_basis' => $torSelectedPriceBasis,
             ]);
             try {
-                outputWordHtml($torWordHtml, torCompanyPurchaseWordFilename($caseId, $items), '', 'tor');
+                outputWordHtml($torWordHtml, torDocumentFilename($caseId, 3, post('tor_doc_date'), '', (string)((procurementCase($caseId)['supplier_name'] ?? ''))), '', 'tor');
             } catch (Throwable $wordError) {
                 error_log('TOR DOCX export failed: ' . $wordError->getMessage());
                 $error = 'สร้างไฟล์ Word ไม่สำเร็จ กรุณาตรวจสอบว่าอัปโหลด core/word_export_lib.php และ assets/fonts ครบ และ PHP เปิดใช้งาน ZipArchive';
@@ -1042,6 +1148,13 @@ $postedPackageSize = $_POST['package_size'] ?? [];
 $postedPackageMode = ($_POST['package_mode'] ?? '') === '1';
 $postedRef = $_POST['reference_price'] ?? [];
 $postedOffer = $_POST['offer_price'] ?? [];
+$torDateRows = [];
+foreach (($data['procurement_documents'] ?? []) as $torDocRow) {
+    if (($torDocRow['document_type'] ?? '') === 'tor_company_purchase') {
+        $torDateRows[(int)($torDocRow['case_id'] ?? 0)] = (string)($torDocRow['doc_date'] ?? '');
+    }
+}
+$torDocumentDate = trim((string)($_POST['tor_doc_date'] ?? ($torDateRows[$selectedCaseId] ?? '')));
 
 // Deduplicate histories by case_id + items_json signature so identical sets don't show multiple times
 $uniqueHistories = [];
@@ -1062,11 +1175,12 @@ foreach ($data['histories'] as $h) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ระบบออกรายงาน TOR จัดซื้อยา</title>
     <script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="docws docws-tor-page min-h-screen bg-zinc-950 text-zinc-100">
 <?php require __DIR__ . '/components/navbar.php'; ?>
 <?php require __DIR__ . '/components/workflow_steps.php'; ?>
-<main class="mx-auto grid max-w-7xl gap-6 px-4 py-6">
+<main class="mx-auto grid max-w-7xl gap-6 px-4 py-6 docws-tor">
     <section class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
         <div class="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-zinc-800 pb-4">
             <div>
@@ -1091,7 +1205,7 @@ foreach ($data['histories'] as $h) {
             <div class="rounded-md border border-zinc-800 bg-zinc-950 p-4">
                 <div class="mb-3">
                     <label class="block">
-                        <span class="text-sm text-zinc-300">เลือกชุดเอกสาร</span>
+                        <span class="text-sm text-zinc-300">1. เลือกชุดเอกสาร</span>
                         <select id="procurement_case_id" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
                             <option value="">เลือกชุดที่ต้องการ</option>
                             <?php foreach ($data['procurement_cases'] as $case): ?>
@@ -1101,12 +1215,44 @@ foreach ($data['histories'] as $h) {
                                 $caseDate = trim((string) ($case['principle_doc_date'] ?? ''));
                                 $caseLabel = 'หนังสือเลขที่ ' . $caseMemo . ' ลงวันที่ ' . $caseDate . ' ซื้อยาจำนวน ' . thaiDigits((string) count($caseItems)) . ' รายการ';
                                 ?>
-                                <option value="<?= (int) $case['id'] ?>" <?= (int) $case['id'] === $selectedCaseId ? 'selected' : '' ?>><?= h($caseLabel) ?></option>
+                                <option value="<?= (int) $case['id'] ?>" data-tor-date="<?= h((string)($torDateRows[(int)$case['id']] ?? '')) ?>" data-supplier="<?= h((string)($case['supplier_name'] ?? '')) ?>" <?= (int) $case['id'] === $selectedCaseId ? 'selected' : '' ?>><?= h($caseLabel . ' · ' . torCaseSupplierLabel($case)) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </label>
+                    <label class="mt-3 block">
+                        <span class="text-sm text-zinc-300">วันที่จัดทำ TOR ตามจริง (ใช้ในชื่อไฟล์ Word/PDF)</span>
+                        <input id="tor_doc_date" name="tor_doc_date" type="text" value="<?= h($torDocumentDate) ?>"
+                            autocomplete="off" placeholder="เช่น ๑๐ พฤศจิกายน ๒๕๖๙"
+                            class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                        <span class="mt-1 block text-xs text-zinc-500">TOR ไม่มีเลขหนังสือแยก จึงไม่ใส่เลขหนังสือของขั้นตอนอื่นแทน</span>
+                    </label>
                     <p id="case_load_status" class="mt-2 text-xs text-zinc-500"></p>
                 </div>
+                <div class="border-t border-zinc-800 py-3">
+                <div class="mb-2 text-sm font-medium text-zinc-100">2. ข้อมูลงบประมาณ</div>
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 items-start">
+                <label class="block min-w-0" for="tor_fiscal_year">
+                    <span class="text-sm font-medium text-zinc-100">ปีงบประมาณ พ.ศ. (ข้อ 1)</span>
+                    <input id="tor_fiscal_year" name="tor_fiscal_year" type="text" inputmode="numeric" maxlength="4"
+                        value="<?= h($torPlanInvalid && is_string($torYearRaw) ? $torYearRaw : thaiDigits($torYear)) ?>"
+                        autocomplete="off" placeholder="ไม่ระบุ" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                </label>
+                <label class="block min-w-0" for="tor_budget_revision">
+                    <span class="text-sm font-medium text-zinc-100">ปรับปรุงครั้งที่ (ข้อ 1)</span>
+                    <input id="tor_budget_revision" name="tor_budget_revision" type="text" inputmode="numeric" maxlength="4"
+                        value="<?= h($torPlanInvalid && is_string($torRevisionRaw) ? $torRevisionRaw : thaiDigits($torRevision)) ?>"
+                        autocomplete="off" placeholder="ไม่ระบุ" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                </label>
+                <label class="block min-w-0" for="tor_allocated_budget">
+                    <span class="text-sm font-medium text-zinc-100">วงเงินงบประมาณที่ได้รับจัดสรร (บาท)</span>
+                    <input id="tor_allocated_budget" name="tor_allocated_budget" type="text" inputmode="decimal"
+                        value="<?= h($torBudgetInvalid && is_string($torBudgetRaw) ? $torBudgetRaw : number_format((float) $torAllocatedBudget, 2, '.', ',')) ?>"
+                        required autocomplete="off" maxlength="24" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-right text-sm outline-none focus:border-emerald-400">
+                </label>
+                </div>
+                <p class="mt-2 text-xs text-zinc-500">ปีงบประมาณและครั้งที่ปรับปรุงเว้นว่างได้ · วงเงินใช้ในข้อ 1 และข้อ 8</p>
+                </div>
+                <div class="border-t border-zinc-800 pt-3 mb-2 text-sm font-medium text-zinc-100">3. คณะกรรมการ</div>
                 <div class="grid gap-3 md:grid-cols-[1fr_auto]">
                     <label class="block">
                         <span class="text-sm text-zinc-300">ชุดกรรมการที่บันทึกไว้</span>
@@ -1170,7 +1316,7 @@ foreach ($data['histories'] as $h) {
 
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <div class="text-sm font-medium text-zinc-100">รายการยาและจำนวนที่จัดซื้อ</div>
+                    <div class="text-sm font-medium text-zinc-100">4. รายการยาและจำนวนที่จัดซื้อ</div>
                     <div class="mt-1 text-xs text-zinc-500">จำนวนตั้งต้นดึงจากเอกสารอนุมัติหลักการ และต้องหารด้วยขนาดบรรจุลงตัวเท่านั้น</div>
                 </div>
                 <button type="button" id="toggle_package_mode" aria-pressed="<?= $postedPackageMode ? 'true' : 'false' ?>" class="rounded-md border border-sky-500/60 px-4 py-2 text-sm text-sky-200 hover:bg-sky-500/10">ปรับขนาดบรรจุ</button>
@@ -1238,10 +1384,20 @@ foreach ($data['histories'] as $h) {
             <div class="rounded-md border border-zinc-800 bg-zinc-950 p-4">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                     <div>
-                        <div class="text-sm font-medium text-zinc-100">ข้อ 7 ราคากลางและแหล่งที่มาของราคากลาง</div>
+                        <div class="text-sm font-medium text-zinc-100">5. ข้อ 7 ราคากลางและแหล่งที่มาของราคากลาง</div>
                         <div class="mt-1 text-xs text-zinc-500">เลือกดราฟเดิม หรือแก้ไขข้อความแล้วบันทึกเป็นดราฟใหม่</div>
                     </div>
                     <button name="action" value="save_draft" class="rounded-md border border-emerald-500/60 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/10">บันทึกข้อความข้อ 7 เป็นดราฟ</button>
+                </div>
+                <div class="mb-3 flex flex-wrap items-end gap-x-3 gap-y-2">
+                    <label class="block w-full sm:w-auto" for="tor_price_basis">
+                        <span class="text-sm text-zinc-300">คำนวณมูลค่าในข้อ 7 จาก</span>
+                        <select id="tor_price_basis" name="tor_price_basis" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                            <option value="reference" <?= $torSelectedPriceBasis === 'reference' ? 'selected' : '' ?>>ราคากลาง × จำนวน (ค่าเริ่มต้น)</option>
+                            <option value="offer" <?= $torSelectedPriceBasis === 'offer' ? 'selected' : '' ?>>ราคาเสนอ × จำนวน</option>
+                        </select>
+                    </label>
+                    <span class="text-xs text-zinc-500">โหมดราคากลางจะซ่อนคอลัมน์ราคาเสนอเฉพาะในเอกสาร ไม่ลบข้อมูลเดิม</span>
                 </div>
                 <div class="grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)]">
                     <label class="block">
@@ -1327,6 +1483,28 @@ const drafts = <?= json_encode(array_column($data['drafts'], null, 'id'), JSON_U
 const committeeSets = <?= json_encode(array_column($data['committee_sets'], null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
 const histories = <?= json_encode(array_column($uniqueHistories, null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
 const procurementCases = <?= json_encode(array_column($data['procurement_cases'], null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
+const torAllocatedBudgets = <?= json_encode((object) $torBudgetRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const torDefaultAllocatedBudget = <?= json_encode(TOR_DEFAULT_ALLOCATED_BUDGET) ?>;
+const torPlanRows = <?= json_encode((object) $torPlanRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const torPriceBasisRows = <?= json_encode((object) $torPriceBasisRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+function setTorPriceBasis(caseId) {
+    const field = document.getElementById('tor_price_basis');
+    if (field) field.value = torPriceBasisRows[String(caseId)] === 'offer' ? 'offer' : 'reference';
+}
+function setTorBudgetPlan(caseId) {
+    const plan = torPlanRows[String(caseId)] ?? {revision:'1', year:''};
+    const thai = value => String(value ?? '').replace(/[0-9]/g, d => '๐๑๒๓๔๕๖๗๘๙'[Number(d)]);
+    for (const [id, value] of [['tor_budget_revision', plan.revision], ['tor_fiscal_year', plan.year]]) {
+        const field = document.getElementById(id);
+        if (field) field.value = thai(value);
+    }
+}
+function setTorAllocatedBudget(caseId) {
+    const field = document.getElementById('tor_allocated_budget');
+    if (!field) return;
+    field.value = Number(torAllocatedBudgets[String(caseId)] ?? torDefaultAllocatedBudget).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    field.dispatchEvent(new Event('input', {bubbles:true}));
+}
 const baht = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let activeReferenceInput = null;
 let priceReferenceSearchTimer = null;
@@ -1660,10 +1838,13 @@ function clearMainFormForReload() {
     if (!form) return;
 
     form.querySelectorAll('input, select, textarea').forEach((field) => {
-        if (field.name === 'action') return;
+        if (field.name === 'action' || field.name === 'csrf_token') return;
         field.value = '';
     });
 
+    setTorAllocatedBudget('');
+    setTorBudgetPlan('');
+    setTorPriceBasis('');
     const rows = Array.from(document.querySelectorAll('#medicine_rows tr'));
     rows.slice(1).forEach((row) => row.remove());
     rows[0]?.querySelectorAll('input').forEach((input) => {
@@ -1871,6 +2052,9 @@ function loadCaseIntoForm(item) {
 
 document.getElementById('procurement_case_id')?.addEventListener('change', (e) => {
     const id = e.target.value;
+    setTorAllocatedBudget(id);
+    setTorBudgetPlan(id);
+    setTorPriceBasis(id);
     document.getElementById('case_id').value = id || '';
     document.getElementById('report_id').value = '';
     if (!id) {
@@ -2043,5 +2227,20 @@ updatePage();
 })();
 </script>
 
+<script>
+(function () {
+  const chooser = document.getElementById('procurement_case_id');
+  const input = document.getElementById('tor_doc_date');
+  if (chooser && input) chooser.addEventListener('change', () => {
+    input.value = chooser.selectedOptions[0]?.dataset.torDate || '';
+    input.dispatchEvent(new Event('input', {bubbles:true}));
+  });
+})();
+</script>
+<script defer src="assets/document-workspace.js?v=20261124-1"></script>
+<script src="assets/tor-document-print-name.js?v=20261124-1"></script>
+<script>
+window.TorDocumentPrintName.init(<?= json_encode(['step'=>3,'caseId'=>$selectedCaseId,'supplier'=>((string)((array_values(array_filter($data['procurement_cases'] ?? [], static fn(array $c):bool => (int)($c['id']??0)===$selectedCaseId))[0]['supplier_name'] ?? ''))),'dateField'=>'tor_doc_date','numberField'=>''], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+</script>
 </body>
 </html>

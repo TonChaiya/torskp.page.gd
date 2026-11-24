@@ -408,6 +408,9 @@ foreach ($medicines as $medicine) {
 $caseId = (int) rawField('case_id', '0');
 $activeCase = procurementCase($caseId);
 $caseOptions = procurementCases();
+$supplierName = trim((string)($_POST['supplier_name'] ?? ($activeCase['supplier_name'] ?? '')));
+$supplierNames = array_values(array_unique(array_filter(array_map(static fn(array $c): string => trim((string)($c['supplier_name'] ?? '')), $caseOptions))));
+sort($supplierNames, SORT_NATURAL);
 ensureCommitteeSetsTable();
 
 if (in_array(($_POST['action'] ?? ''), ['save_committee_set', 'save_committee_set_ajax'], true)) {
@@ -635,7 +638,7 @@ if (($_POST['action'] ?? '') === 'word') {
         'director_name' => $directorName,
         'director_position' => $directorPosition,
     ];
-    $principleWordFilename = principleApprovalMemoWordFilename($memoNoSuffix, $docDate, $itemCount);
+    $principleWordFilename = torDocumentFilename($caseId, 1, $docDate, $memoNoSuffix, $supplierName);
     try {
         outputPrincipleApprovalMemoDocx($principleWordData, $principleWordFilename);
     } catch (Throwable $primaryError) {
@@ -653,6 +656,10 @@ if (($_POST['action'] ?? '') === 'save_case') {
     $normalizedFiscalYear = arabicDigits(trim($fiscalYear));
     if (!preg_match('/^2[4-9][0-9]{2}$/', $normalizedFiscalYear)) {
         $saveError = 'กรุณาระบุปีงบประมาณ พ.ศ. เป็นตัวเลข 4 หลัก เช่น 2570';
+    } elseif ($caseId <= 0 && $supplierName === '') {
+        $saveError = 'กรุณาระบุชื่อบริษัทผู้ขายก่อนสร้างชุดเอกสารใหม่';
+    } elseif (preg_match_all('/./us', $supplierName) > 255) {
+        $saveError = 'ชื่อบริษัทต้องไม่เกิน 255 ตัวอักษร';
     } elseif (!$budgetInputValid) {
         $saveError = 'กรุณากรอกวงเงินเป็นตัวเลขไม่เกิน 12 หลัก และทศนิยมไม่เกิน 2 ตำแหน่ง';
     } elseif (trim($memoNoSuffix) === '' || trim($docDate) === '') {
@@ -669,6 +676,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
     $caseId = saveProcurementCase([
         'id' => $caseId,
         'title' => $caseTitle,
+        'supplier_name' => $supplierName,
         'fiscal_year' => arabicDigits($fiscalYear),
         'plan_approved_date' => $planApprovedDate,
         'plan_revision_note' => $planRevisionNote,
@@ -822,13 +830,14 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
             }
         }
     </style>
+<link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="docws docws-principle-page min-h-screen bg-zinc-950 text-zinc-100">
 <?php require __DIR__ . '/components/navbar.php'; ?>
 <?php require __DIR__ . '/components/workflow_steps.php'; ?>
 
-<main class="mx-auto grid max-w-[100rem] gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_620px]">
-    <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
+<main class="mx-auto grid max-w-[100rem] gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_620px] docws-layout" data-docws-layout="1">
+    <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain docws-editor-pane" data-docws-editor="1">
         <div class="mb-4 grid gap-3">
             <h1 class="text-lg font-semibold">ข้อมูลบันทึกข้อความ</h1>
             <div class="grid grid-cols-2 gap-2">
@@ -852,7 +861,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
                         <?php
                         $optionMemo = trim((string) ($caseOption['principle_memo_no_suffix'] ?? ''));
                         $optionDate = trim((string) ($caseOption['principle_doc_date'] ?? ''));
-                        $optionLabel = 'ชม.๕๑๐๐๖.๑๓.๑/' . $optionMemo . ' ลงวันที่ ' . $optionDate;
+                        $optionLabel = 'ชม.๕๑๐๐๖.๑๓.๑/' . $optionMemo . ' ลงวันที่ ' . $optionDate . ' · ' . torCaseSupplierLabel($caseOption);
                         ?>
                         <option value="<?= (int) $caseOption['id'] ?>" <?= (int) $caseOption['id'] === (int) $caseId ? 'selected' : '' ?>><?= h($optionLabel) ?></option>
                     <?php endforeach; ?>
@@ -878,6 +887,15 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
             <section class="rounded-md border border-zinc-800 p-3" aria-labelledby="principle-primary-data">
                 <div id="principle-primary-data" class="mb-2 text-sm font-semibold text-emerald-300">1. ข้อมูลโครงการและหนังสือ</div>
                 <p class="mb-3 text-xs text-zinc-500">ระบุปีงบประมาณของชุดเอกสารตั้งแต่ขั้นตอนแรก วันที่ในหนังสือเป็นคนละข้อมูล</p>
+                <label class="mb-3 block">
+                    <span class="text-xs text-zinc-400">บริษัทผู้ขายประจำชุดเอกสาร <span aria-hidden="true">*</span></span>
+                    <input type="text" name="supplier_name" id="supplier_name" list="supplier-name-options" maxlength="255"
+                        value="<?= h($supplierName) ?>" <?= $caseId <= 0 ? 'required' : '' ?>
+                        autocomplete="organization" placeholder="เช่น บริษัทชุมชนเภสัช จำกัด"
+                        class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
+                    <datalist id="supplier-name-options"><?php foreach ($supplierNames as $knownSupplier): ?><option value="<?= h($knownSupplier) ?>"></option><?php endforeach; ?></datalist>
+                    <span class="mt-1 block text-xs text-zinc-500">ระบุครั้งเดียว ใช้กับเอกสารทั้งชุด · ชุดเก่าสามารถเพิ่ม/แก้ไขชื่อได้ที่นี่</span>
+                </label>
                 <label class="mb-3 block">
                     <span class="text-xs text-zinc-400">ปีงบประมาณ พ.ศ. <span aria-hidden="true">*</span></span>
                     <input name="fiscal_year" data-field="fiscal_year" inputmode="numeric" maxlength="4" required value="<?= h($fiscalYear) ?>" placeholder="เช่น ๒๕๗๐" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-emerald-400">
@@ -980,7 +998,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
         </form>
     </aside>
 
-    <section class="document-stack order-1 overflow-auto">
+    <section class="document-stack order-1 overflow-auto docws-preview-pane" data-docws-preview="1">
         <article class="memo-page" id="memo_page_1">
             <div class="grid grid-cols-[3cm_1fr_3cm] items-start">
                 <img src="picture/picture-1.png" alt="" class="garuda">
@@ -1920,5 +1938,10 @@ convertTextNodeDigitsToThai(document.getElementById('memo_page_1') || document);
 })();
 </script>
 
+<script defer src="assets/document-workspace.js?v=20261124-1"></script>
+<script src="assets/tor-document-print-name.js?v=20261124-1"></script>
+<script>
+window.TorDocumentPrintName.init(<?= json_encode(['step'=>1,'caseId'=>$caseId,'supplier'=>$supplierName,'dateField'=>'doc_date','numberField'=>'memo_no_suffix'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+</script>
 </body>
 </html>

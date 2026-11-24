@@ -988,7 +988,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
     } elseif ($historyId <= 0 || !$history) {
         $error = 'กรุณาเลือกข้อมูล TOR จากหัวข้อ 1 ก่อนบันทึก';
     } else {
-        saveProcurementDocument($caseId, 'meeting_report', '', '', [
+        saveProcurementDocument($caseId, 'meeting_report', '', $meetingDate, [
             'history_id' => $historyId,
             'meeting_title' => $meetingTitle,
             'purpose_line' => $purposeLine,
@@ -1042,7 +1042,7 @@ $meetingDocumentData = [
 if (($_POST['action'] ?? '') === 'word') {
     $meetingWordHtml = meetingReportWordHtml($meetingDocumentData);
     try {
-        outputWordHtml($meetingWordHtml, meetingReportWordFilename($meetingDate, $itemCountText), '', 'meeting');
+        outputWordHtml($meetingWordHtml, torDocumentFilename($caseId, 6, $meetingDate, '', (string)($activeCase['supplier_name'] ?? '')), '', 'meeting');
     } catch (Throwable $wordError) {
         error_log('Meeting report DOCX export failed: ' . $wordError->getMessage());
         $error = 'สร้างไฟล์ Word ไม่สำเร็จ กรุณาตรวจสอบว่าอัปโหลด core/word_export_lib.php และ assets/fonts ครบ และ PHP เปิดใช้งาน ZipArchive';
@@ -1246,12 +1246,13 @@ $timeFields = [
             .report-page .budget-frame { border: 1px solid #000 !important; }
         }
     </style>
+<link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="docws docws-meeting-page min-h-screen bg-zinc-950 text-zinc-100">
 <?php require __DIR__ . '/components/navbar.php'; ?>
 <?php require __DIR__ . '/components/workflow_steps.php'; ?>
-<main class="mx-auto grid max-w-[96rem] gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_560px]">
-    <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-auto">
+<main class="mx-auto grid max-w-[96rem] gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_560px] docws-layout" data-docws-layout="1">
+    <aside class="no-print order-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-auto docws-editor-pane" data-docws-editor="1">
         <div class="mb-4 flex items-center justify-between gap-3">
             <h1 class="text-lg font-semibold">รายงานการประชุม</h1>
             <div class="flex flex-wrap gap-2">
@@ -1272,6 +1273,7 @@ $timeFields = [
         <?php endif; ?>
         <form method="get" action="meeting_report.php" class="mb-4 rounded-md border border-zinc-800 p-3">
                 <div class="mb-3 text-sm font-medium text-zinc-100">1. เลือกชุดข้อมูลจาก TOR</div>
+                <?php if ($activeCase): ?><p class="mb-2 text-xs text-zinc-400">บริษัทผู้ขาย: <?= h(torCaseSupplierLabel($activeCase)) ?></p><?php endif; ?>
                 <label class="block">
                     <span class="text-sm text-zinc-300">ประวัติ TOR ที่บันทึกไว้</span>
                     <input type="hidden" name="case_id" value="<?= (int) $caseId ?>">
@@ -1403,7 +1405,7 @@ $timeFields = [
         </form>
     </aside>
 
-    <section id="meeting-preview" class="order-1 overflow-auto" tabindex="-1">
+    <section id="meeting-preview" class="order-1 overflow-auto docws-preview-pane" tabindex="-1" data-docws-preview="1">
         <?php if (($_GET['saved'] ?? '') === '1' && $caseId > 0): ?>
         <div class="no-print mb-4 rounded-lg border p-4" style="background:#ffffff !important;color:#17212b !important;border-color:#94a3b8 !important;box-shadow:none !important;" role="status">
             <div class="font-semibold" style="color:#17212b !important;">บันทึกรายงานการประชุมเรียบร้อยแล้ว</div>
@@ -1653,5 +1655,10 @@ function escapeHtml(value) {
 })();
 </script>
 
+<script defer src="assets/document-workspace.js?v=20261124-1"></script>
+<script src="assets/tor-document-print-name.js?v=20261124-1"></script>
+<script>
+window.TorDocumentPrintName.init(<?= json_encode(['step'=>6,'caseId'=>$caseId,'supplier'=>(string)($activeCase['supplier_name'] ?? ''),'dateField'=>'meeting_date','numberField'=>''], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+</script>
 </body>
 </html>
