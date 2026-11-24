@@ -1,0 +1,82 @@
+/* TOR SKP / compact workspace — applies only to admin.php. */
+.admin-backoffice { background:#edf4fb!important; color:#213e56; font-size:13px; }
+.admin-backoffice .compact-admin-main { width:min(calc(100% - 28px), 1920px)!important; max-width:none!important; padding:14px 0 36px!important; }
+.admin-backoffice .compact-hero { min-height:0; padding:16px 22px!important; border-radius:12px!important; box-shadow:none!important; display:flex; align-items:center; gap:20px; }
+.admin-backoffice .compact-hero .bo-eyebrow { margin:0 0 3px!important; font-size:10px!important; }
+.admin-backoffice .compact-hero h1 { font-size:22px!important; margin:0!important; line-height:1.35!important; }
+.admin-backoffice .compact-hero p:not(.bo-eyebrow) { font-size:12px!important; margin:3px 0 0!important; line-height:1.5; }
+.admin-backoffice .compact-hero-right { margin-left:auto; display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
+.admin-backoffice .compact-count { color:#fff; display:inline-flex; align-items:baseline; gap:6px; white-space:nowrap; font-size:18px; font-weight:800; }
+.admin-backoffice .compact-count small { color:#d6eaff; font-size:11px; font-weight:500; }
+.admin-backoffice .compact-hero-right .bo-hero-secondary { font-size:12px; min-height:35px; padding:7px 12px; box-shadow:none; }
+.admin-backoffice .compact-section-nav { position:sticky; top:0; z-index:12; margin:10px 0 12px!important; padding:5px 6px!important; border-radius:10px; box-shadow:0 2px 8px #173c5c0e; background:#fff; gap:3px; }
+.admin-backoffice .compact-section-nav a { border-radius:7px!important; font-size:12px!important; padding:8px 13px!important; }
+.admin-backoffice .compact-account-link { margin-left:auto; }
+.admin-backoffice .compact-admin-main>div.grid { display:grid!important; gap:11px!important; }
+.admin-backoffice .compact-admin-main>div.grid>section { padding:12px 16px!important; border-radius:12px!important; box-shadow:0 3px 15px #1a4e760d!important; }
+.admin-backoffice .admin-panel>summary { padding:0!important; min-height:33px; }
+.admin-backoffice .admin-panel>summary .text-lg { font-size:16px!important; line-height:1.3!important; }
+.admin-backoffice .admin-panel>summary .text-sm { margin-top:1px!important; font-size:11px!important; line-height:1.45!important; }
+.admin-backoffice .admin-panel .panel-indicator { border:1px solid #cddfea!important; font-size:11px!important; padding:4px 9px!important; border-radius:6px!important; }
+.admin-backoffice .compact-subnote { padding:8px 0 0; font-size:11px; color:#63809a; }
+.admin-backoffice .compact-find { padding:11px 0 8px; margin:0; }
+.admin-backoffice .compact-find-label { display:block; margin:0 0 5px; font-size:12px; font-weight:700; color:#355773; }
+.admin-backoffice .compact-find-row { display:flex; align-items:stretch; gap:7px; }
+.admin-backoffice .compact-find input { width:100%; flex:1; min-width:0; min-height:38px!important; border:1px solid #cbdfea!important; background:#fff!important; padding:7px 12px!important; border-radius:7px!important; font-size:13px!important; }
+.admin-backoffice .compact-find input:focus { border-color:#1688d7!important; box-shadow:0 0 0 3px #1b9be321!important; }
+.admin-backoffice .compact-search-submit,.admin-backoffice .compact-clear { padding:7px 13px; background:#eff7ff; border:1px solid #bad7ec; color:#175986; border-radius:7px!important; white-space:nowrap; min-height:38px; font-size:12px; }
+.admin-backoffice .compact-clear { background:#fff; border-color:#dce5ee; color:#58738a; }
+.admin-backoffice .compact-status { margin:6px 0 0; font-size:11px; color:#698096; min-height:15px; }
+.admin-backoffice .compact-status[data-state="error"] { color:#b02e45; }
+.admin-backoffice .compact-table-viewport { border:1px solid #dae7f1; border-radius:8px; overflow:auto; max-height:min(58vh,710px); scrollbar-width:thin; }
+.admin-backoffice .compact-table-viewport table { width:100%!important; min-width:680px; font-size:12px!important; table-layout:fixed; }
+.admin-backoffice #medicine-catalog table th:first-child { width:24%; }
+.admin-backoffice #medicine-catalog table th:nth-child(2) { width:11%; }
+.admin-backoffice #medicine-catalog table th:nth-child(3) { width:53%; }
+.admin-backoffice #medicine-catalog table th:last-child { width:12%; }
+.admin-backoffice #price-references table th:first-child { width:25%; }
+.admin-backoffice #price-references table th:nth-child(2) { width:35%; }
+.admin-backoffice #price-references table th:nth-child(3) { width:11%; }
+.admin-backoffice #price-references table th:nth-child(4) { width:15%; }
+.admin-backoffice #price-references table th:last-child { width:14%; }
+.admin-backoffice .compact-table-viewport th { position:sticky; top:0; z-index:2; padding:8px 11px!important; font-size:11px; white-space:nowrap; }
+.admin-backoffice .compact-table-viewport td { padding:6px 11px!important; line-height:1.52; overflow-wrap:anywhere; }
+.admin-backoffice .compact-table-viewport .compact-spec { white-space:pre-line; line-height:1.5; max-width:0; overflow-wrap:anywhere; }
+.admin-backoffice .compact-table-viewport tr:nth-child(2n) td { background:#fbfdff; }
+.admin-backoffice .compact-row-actions { white-space:nowrap; }
+.admin-backoffice .compact-row-actions a { font-weight:700; color:#0873b7!important; }
+.admin-backoffice .compact-delete { margin-left:6px; background:transparent!important; color:#b34757!important; padding:2px 3px!important; font-size:12px; }
+.admin-backoffice .compact-empty { padding:24px!important; text-align:center; color:#678296; }
+.admin-backoffice .compact-pager { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 1px 10px; font-size:11px; color:#607b90; }
+.admin-backoffice .compact-pager>div { display:flex; gap:5px; }
+.admin-backoffice .compact-pager button { padding:5px 10px; min-height:27px; border:1px solid #d2e2ed!important; border-radius:6px!important; color:#235e86; background:#f6fafe!important; font-size:11px; }
+.admin-backoffice .compact-pager button:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+.admin-backoffice .compact-utility-row { display:flex; align-items:start; flex-wrap:wrap; gap:8px; border-top:1px solid #edf1f5; padding:10px 0 0; }
+.admin-backoffice .compact-tool { min-width:180px; flex:1 1 240px; padding:0; border:1px solid #dce6f0; border-radius:8px; background:#fff; overflow:hidden; }
+.admin-backoffice .compact-tool summary { cursor:pointer; list-style:none; padding:8px 12px; background:#f4f9fe; color:#28618d; font-size:12px; font-weight:750; }
+.admin-backoffice .compact-tool summary::-webkit-details-marker { display:none; }
+.admin-backoffice .compact-tool summary:before { content:'＋'; margin-right:7px; }
+.admin-backoffice .compact-tool[open] summary:before { content:'−'; }
+.admin-backoffice .compact-tool-content { padding:10px 12px; }
+.admin-backoffice .compact-tool form { margin:0!important; border:0!important; padding:0!important; box-shadow:none!important; background:#fff!important; }
+.admin-backoffice .compact-tool form h3,.admin-backoffice .compact-tool-content>h2 { font-size:13px!important; margin:2px 0 8px!important; }
+.admin-backoffice .compact-tool-content label span { font-size:12px!important; }
+.admin-backoffice .compact-tool-content input:not([type="hidden"]):not([type="checkbox"]),.admin-backoffice .compact-tool-content textarea { min-height:34px!important; padding:6px 9px!important; font-size:12px!important; border-radius:7px!important; }
+.admin-backoffice .compact-tool-content textarea { resize:vertical; min-height:76px!important; }
+.admin-backoffice .compact-tool-content button { padding:7px 12px!important; min-height:32px!important; font-size:12px!important; }
+.admin-backoffice #document-signers form { margin-top:8px!important; padding:12px!important; border:1px solid #e0eaf3!important; border-radius:8px!important; box-shadow:none!important; background:#fff!important; }
+.admin-backoffice #document-signers textarea { min-height:68px; }
+.admin-backoffice #document-signers form .grid { gap:10px!important; }
+.admin-backoffice #document-signers form button { padding:7px 13px!important; font-size:12px!important; }
+.admin-backoffice #document-signers form .mb-4 { margin-bottom:8px!important; }
+.admin-backoffice #document-signers form .mt-4 { margin-top:8px!important; }
+@media (min-width:1600px){.admin-backoffice .compact-admin-main{width:min(calc(100% - 60px),1920px)!important}.admin-backoffice .compact-table-viewport{max-height:min(67vh,840px)}}
+@media (max-width:900px){.admin-backoffice .compact-hero{align-items:flex-start;flex-direction:column;gap:10px}.admin-backoffice .compact-hero-right{margin-left:0;justify-content:flex-start}.admin-backoffice .compact-section-nav{position:static}.admin-backoffice .compact-table-viewport{max-height:54vh}.admin-backoffice .compact-admin-main{width:calc(100% - 22px)!important}}
+@media (max-width:560px){.admin-backoffice .compact-hero{padding:13px 15px!important}.admin-backoffice .compact-hero h1{font-size:20px!important}.admin-backoffice .compact-section-nav{display:flex; overflow-x:auto; white-space:nowrap}.admin-backoffice .compact-section-nav a{padding:7px 9px!important}.admin-backoffice .compact-account-link{margin-left:0}.admin-backoffice .compact-admin-main>div.grid>section{padding:12px!important}.admin-backoffice .compact-find-row{gap:5px}.admin-backoffice .compact-find input{font-size:12px!important}.admin-backoffice .compact-search-submit{display:none}.admin-backoffice .compact-clear{padding:7px 10px}.admin-backoffice .compact-utility-row{flex-direction:column}.admin-backoffice .compact-tool{width:100%;flex:0 1 auto}.admin-backoffice .compact-pager{flex-wrap:wrap}.admin-backoffice .compact-table-viewport table{font-size:11px!important}}
+@media (prefers-reduced-motion:reduce) { .admin-backoffice * { scroll-behavior:auto!important; } }
+
+/* Keep wide tables scrollable within their panel, never grow the entire page. */
+.admin-backoffice .compact-admin-main>div.grid>section,.admin-backoffice .compact-admin-main .admin-panel { min-width:0!important; width:100%; }
+.admin-backoffice .compact-table-viewport { width:100%!important; max-width:100%!important; min-width:0!important; }
+.admin-backoffice .compact-table-viewport td:last-child a,.admin-backoffice .compact-table-viewport td:last-child form { display:inline-block!important; vertical-align:middle; }
+.admin-backoffice .compact-table-viewport td:last-child button { border:0!important; box-shadow:none!important; background:none!important; padding:0 2px!important; line-height:1.4; }

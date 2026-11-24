@@ -70,12 +70,14 @@ function currentUser(): ?array
         return $user;
     }
 
-    $stmt = db()->prepare('SELECT id, username, role, must_change_password, password_changed_at, created_at FROM users WHERE id = ? LIMIT 1');
+    // Re-read approval state for every HTTP request, including existing sessions.
+    $stmt = db()->prepare('SELECT id, username, full_name, department, role, account_status, must_change_password, password_changed_at, created_at FROM users WHERE id = ? LIMIT 1');
     $stmt->execute([(int) $_SESSION['user_id']]);
     $user = $stmt->fetch() ?: null;
-    if (!$user) {
+    if (!$user || (string) ($user['account_status'] ?? '') !== 'approved') {
         $_SESSION = [];
-        session_destroy();
+        session_regenerate_id(true);
+        $user = null;
     }
     return $user;
 }

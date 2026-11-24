@@ -5,7 +5,10 @@ require __DIR__ . '/core/procurement_case.php';
 require __DIR__ . '/core/auth.php';
 requireLogin();
 
-function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
+function h(?string $text): string
+{
+    return htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
 function historySearchText(string $text): string
 {
     return mb_strtolower(strtr($text, [
@@ -13,7 +16,16 @@ function historySearchText(string $text): string
         '๕' => '5', '๖' => '6', '๗' => '7', '๘' => '8', '๙' => '9',
     ]), 'UTF-8');
 }
+function historyThaiDigits(string $text): string
+{
+    return strtr($text, [
+        '0' => '๐', '1' => '๑', '2' => '๒', '3' => '๓', '4' => '๔',
+        '5' => '๕', '6' => '๖', '7' => '๗', '8' => '๘', '9' => '๙',
+    ]);
+}
 
+// Preserve the existing delete actions and their destinations. requireLogin()
+// verifies CSRF for POST submissions before this handler is reached.
 ensureProcurementTables();
 $deleteError = '';
 if (($_POST['action'] ?? '') === 'delete_selection') {
@@ -33,221 +45,281 @@ if (($_POST['action'] ?? '') === 'delete_selection') {
     }
 }
 
-$cases = procurementCases();
-$historySearch = trim((string) ($_GET['search'] ?? ''));
-if ($historySearch !== '') {
-    $needle = historySearchText($historySearch);
-    $cases = array_values(array_filter($cases, static function (array $case) use ($needle): bool {
-        $items = json_decode((string) ($case['items_json'] ?? '[]'), true);
-        $itemNames = [];
-        foreach (is_array($items) ? $items : [] as $item) {
-            $itemNames[] = (string) ($item['name'] ?? '');
-        }
-        $haystack = implode(' ', [
-            (string) ($case['principle_memo_no_suffix'] ?? ''),
-            (string) ($case['principle_doc_date'] ?? ''),
-            implode(' ', $itemNames),
-        ]);
-        return mb_strpos(historySearchText($haystack), $needle) !== false;
-    }));
+$documentSteps = [
+    'principle_approval' => ['short' => 'อนุมัติหลักการ', 'label' => 'บันทึกข้อความ ขออนุมัติในหลักการ', 'page' => 'principle_approval_memo.php'],
+    'committee_scope_invitation' => ['short' => 'เชิญกรรมการ', 'label' => 'แจ้งคำสั่งและเชิญประชุม', 'page' => 'committee_scope_invitation.php'],
+    'scope_price_approval_memo' => ['short' => 'อนุมัติใช้ TOR', 'label' => 'ขออนุมัติคุณลักษณะและราคากลาง', 'page' => 'scope_price_approval_memo.php'],
+    'tor_company_purchase' => ['short' => 'เอกสาร TOR', 'label' => 'เอกสาร TOR', 'page' => 'tor_company_purchase.php'],
+    'committee_scope_result_memo' => ['short' => 'รายงานผล', 'label' => 'รายงานผลการพิจารณา', 'page' => 'committee_scope_result_memo.php'],
+    'meeting_report' => ['short' => 'รายงานประชุม', 'label' => 'รายงานการประชุม', 'page' => 'meeting_report.php'],
+];
+
+// Get actual item names from the case record: procurementCases() does not
+// select items_json. Reuse these details for the list and live-search index.
+$caseRows = [];
+$totalComplete = 0;
+foreach (procurementCases() as $case) {
+    $caseId = (int) ($case['id'] ?? 0);
+    if ($caseId <= 0) continue;
+    $fullCase = procurementCase($caseId) ?: [];
+    $items = is_array($fullCase['items'] ?? null) ? $fullCase['items'] : [];
+    $itemNames = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $name = trim((string) ($item['name'] ?? ''));
+        if ($name !== '') $itemNames[] = $name;
+    }
+    $completion = procurementCaseCompletion($caseId);
+    $completedCount = 0;
+    $nextStep = null;
+    $deleteOptions = [];
+    foreach ($documentSteps as $key => $step) {
+        $hasDocument = !empty($completion[$key]);
+        if ($hasDocument) $completedCount++;
+        elseif ($nextStep === null) $nextStep = $step;
+        $deleteOptions[$key] = ['label' => $step['short'], 'available' => $hasDocument];
+    }
+    $totalComplete += (int) ($completedCount === count($documentSteps));
+    $memoNo = trim((string) ($case['principle_memo_no_suffix'] ?? ''));
+    $docDate = trim((string) ($case['principle_doc_date'] ?? ''));
+    $caseTitle = trim((string) ($case['title'] ?? ''));
+    $label = 'ชม.๕๑๐๐๖.๑๓.๑/' . ($memoNo !== '' ? $memoNo : '—');
+    $caseRows[] = [
+        'id' => $caseId,
+        'label' => $label,
+        'doc_date' => $docDate,
+        'title' => $caseTitle,
+        'items_count' => count($items),
+        'item_names' => $itemNames,
+        'completion' => $completion,
+        'completed_count' => $completedCount,
+        'next_step' => $nextStep,
+        'delete_options' => $deleteOptions,
+        'search' => historySearchText(implode(' ', [$label, $memoNo, $docDate, $caseTitle, (string) $caseId, implode(' ', $itemNames)])),
+    ];
 }
+$totalCases = count($caseRows);
+$historySearch = trim((string) ($_GET['search'] ?? ''));
+$initialNeedle = historySearchText($historySearch);
+$initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter($caseRows,
+    static fn(array $row): bool => mb_strpos($row['search'], $initialNeedle, 0, 'UTF-8') !== false
+));
 ?>
 <!doctype html>
 <html lang="th">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ประวัติการออกเอกสาร</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="description" content="ค้นหาและจัดการประวัติชุดเอกสาร TOR">
+    <title>ประวัติเอกสาร | TOR Report</title>
+    <link rel="stylesheet" href="assets/history-blue.css?v=20261124-1">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="torskp-history-body">
 <?php require __DIR__ . '/components/navbar.php'; ?>
-<main class="mx-auto max-w-6xl px-4 py-8">
-    <section class="rounded-lg border border-zinc-800 bg-zinc-900/80">
-        <div class="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-800 px-5 py-6 sm:px-7">
-            <div>
-                <p class="text-sm font-semibold text-emerald-300">ชุดเอกสารทั้งหมด</p>
-                <h1 class="mt-1 text-3xl font-bold">ประวัติการออกเอกสาร</h1>
-                <p class="mt-2 text-sm text-zinc-400">ค้นหา เปิดแก้ไข และตรวจความครบถ้วนของเอกสารทั้ง ๖ หัวข้อ</p>
-            </div>
-            <a href="principle_approval_memo.php" class="rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">+ สร้างชุดเอกสารใหม่</a>
+<main class="history-workspace" id="main-content">
+    <header class="history-head">
+        <div class="history-head-copy">
+            <span class="history-eyebrow">DOCUMENT HISTORY</span>
+            <h1>ประวัติเอกสาร</h1>
+            <p>ค้นหาและกลับไปทำเอกสารเดิมได้ทันที · แสดงชุดที่แก้ไขล่าสุดก่อน</p>
         </div>
-        <?php if (($_GET['deleted'] ?? '') === '1'): ?>
-            <div class="mx-5 mt-4 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">ลบชุดเอกสารเรียบร้อยแล้ว</div>
-        <?php endif; ?>
-        <?php if ($deleteError !== ''): ?>
-            <div class="mx-5 mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100"><?= h($deleteError) ?></div>
-        <?php endif; ?>
-        <form method="get" class="grid gap-3 border-b border-zinc-800 bg-slate-50/70 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-7">
-            <label>
-                <span class="sr-only">ค้นหาชุดเอกสาร</span>
-                <input name="search" value="<?= h($historySearch) ?>" placeholder="ค้นหาเลขที่หนังสือ วันที่ หรือชื่อยา" class="w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none">
-            </label>
-            <div class="flex gap-2">
-                <button class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">ค้นหา</button>
-                <?php if ($historySearch !== ''): ?><a href="document_history.php" class="rounded-md border border-zinc-700 px-4 py-2 text-sm">ล้าง</a><?php endif; ?>
+        <a class="history-create" href="principle_approval_memo.php"><span aria-hidden="true">＋</span> สร้างชุดใหม่</a>
+    </header>
+
+    <?php if (($_GET['deleted'] ?? '') === '1'): ?>
+        <div class="history-feedback is-success" role="status">ลบชุดเอกสารเรียบร้อยแล้ว</div>
+    <?php endif; ?>
+    <?php if ($deleteError !== ''): ?>
+        <div class="history-feedback is-error" role="alert"><?= h($deleteError) ?></div>
+    <?php endif; ?>
+
+    <section class="history-pane" aria-labelledby="history-pane-title">
+        <div class="history-toolbar">
+            <div class="history-title-area">
+                <h2 id="history-pane-title">ชุดเอกสารจัดซื้อ</h2>
+                <span class="history-stat"><?= h(historyThaiDigits((string) $totalCases)) ?> ชุด</span>
+                <span class="history-complete-stat">สำเร็จ <?= h(historyThaiDigits((string) $totalComplete)) ?> ชุด</span>
             </div>
-        </form>
-        <div class="divide-y divide-zinc-800">
-            <?php if (!$cases): ?>
-                <div class="px-5 py-10 text-center text-sm text-zinc-400"><?= $historySearch !== '' ? 'ไม่พบชุดเอกสารที่ตรงกับคำค้น' : 'ยังไม่มีประวัติเอกสาร' ?></div>
-            <?php endif; ?>
-            <?php foreach ($cases as $case): ?>
+            <form id="history-search-form" action="document_history.php" method="get" class="history-controls" role="search">
+                <label class="history-search-label" for="history-search"><span class="sr-only">ค้นหาชุดเอกสาร</span>
+                    <span aria-hidden="true" class="history-search-icon">⌕</span>
+                    <input id="history-search" type="search" name="search" autocomplete="off"
+                        value="<?= h($historySearch) ?>" placeholder="ค้นหาเลขที่หนังสือ วันที่ ชื่อยา...">
+                </label>
+                <label class="history-status-label" for="history-status"><span class="sr-only">กรองสถานะ</span>
+                    <select id="history-status"><option value="all">ทุกสถานะ</option><option value="progress">กำลังดำเนินการ</option><option value="complete">ครบ ๖ ขั้นตอน</option></select>
+                </label>
+                <button class="history-search-submit" type="submit">ค้นหา</button>
+                <a href="document_history.php" class="history-clear" id="history-clear">ล้าง</a>
+            </form>
+        </div>
+        <div class="history-table-head" aria-hidden="true"><span>ชุดเอกสาร / รายการยา</span><span>ความคืบหน้า</span><span>ดำเนินการ</span></div>
+        <div class="history-rows" id="history-rows">
+            <?php foreach ($caseRows as $row): ?>
                 <?php
-                $id = (int) $case['id'];
-                $fullCase = procurementCase($id);
-                $itemsCount = count($fullCase['items'] ?? []);
-                $completion = procurementCaseCompletion($id);
-                $completedCount = count(array_filter($completion));
-                $deleteOptions = [
-                    'principle_approval' => ['label' => 'หัวข้อ 1', 'available' => $completion['principle_approval']],
-                    'committee_scope_invitation' => ['label' => 'หัวข้อ 2', 'available' => $completion['committee_scope_invitation']],
-                    'scope_price_approval_memo' => ['label' => 'หัวข้อ ๓', 'available' => $completion['scope_price_approval_memo']],
-                    'tor_company_purchase' => ['label' => 'หัวข้อ ๔', 'available' => $completion['tor_company_purchase']],
-                    'committee_scope_result_memo' => ['label' => 'หัวข้อ ๕', 'available' => $completion['committee_scope_result_memo']],
-                    'meeting_report' => ['label' => 'หัวข้อ ๖', 'available' => $completion['meeting_report']],
-                ];
-                $memoNo = trim((string) ($case['principle_memo_no_suffix'] ?? ''));
-                $docDate = trim((string) ($case['principle_doc_date'] ?? ''));
-                $caseLabel = "ชม.๕๑๐๐๖.๑๓.๑/{$memoNo} ลงวันที่ {$docDate}";
+                $id = $row['id'];
+                $done = $row['completed_count'] === count($documentSteps);
+                $nextStep = $row['next_step'];
+                $firstHref = $documentSteps['principle_approval']['page'] . '?case_id=' . $id;
+                $continueHref = ($nextStep['page'] ?? $documentSteps['principle_approval']['page']) . '?case_id=' . $id;
+                $isInitiallyHidden = $initialNeedle !== '' && mb_strpos($row['search'], $initialNeedle, 0, 'UTF-8') === false;
                 ?>
-                <div class="grid gap-4 px-5 py-5 transition hover:bg-indigo-50/40 md:grid-cols-[minmax(0,1fr)_auto] md:items-center sm:px-7">
-                    <div>
-                        <div class="font-medium text-zinc-100">
-                            <?= h($caseLabel) ?> ซื้อยา <?= h((string) $itemsCount) ?> รายการ
-                        </div>
-                        <div class="mt-2 flex items-center gap-3">
-                            <div class="ui-progress-track max-w-52 flex-1"><div class="ui-progress-bar" style="width: <?= $completedCount * (100 / 6) ?>%"></div></div>
-                            <div class="text-xs font-semibold <?= $completedCount === 6 ? 'text-emerald-300' : 'text-indigo-600' ?>">ครบ <?= h((string) $completedCount) ?>/๖</div>
+                <article class="history-row" data-history-row data-search="<?= h($row['search']) ?>"
+                    data-state="<?= $done ? 'complete' : 'progress' ?>" <?= $isInitiallyHidden ? 'hidden' : '' ?>>
+                    <div class="history-case-main">
+                        <div class="history-case-number"><span class="history-dot" aria-hidden="true"></span><strong><?= h($row['label']) ?></strong><span class="history-case-date"><?= $row['doc_date'] !== '' ? 'วันที่ ' . h($row['doc_date']) : 'ยังไม่ระบุวันที่' ?></span></div>
+                        <?php if ($row['title'] !== ''): ?><div class="history-case-title"><?= h($row['title']) ?></div><?php endif; ?>
+                        <div class="history-case-details-line">
+                            <span><?= h(historyThaiDigits((string) $row['items_count'])) ?> รายการยา</span>
+                            <?php if ($row['item_names']): ?><span class="history-medicine-preview" title="<?= h(implode(', ', $row['item_names'])) ?>"><?= h(implode(', ', array_slice($row['item_names'], 0, 3))) ?><?= count($row['item_names']) > 3 ? ' และอื่น ๆ' : '' ?></span><?php endif; ?>
                         </div>
                     </div>
-                    <div class="flex flex-nowrap gap-2 overflow-x-auto text-sm">
-                        <a href="principle_approval_memo.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['principle_approval'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">1 อนุมัติ</a>
-                        <a href="committee_scope_invitation.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['committee_scope_invitation'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">2 เชิญกรรมการ</a>
-                        <a href="scope_price_approval_memo.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['scope_price_approval_memo'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">๓ อนุมัติใช้ TOR</a>
-                        <a href="tor_company_purchase.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['tor_company_purchase'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">๔ TOR</a>
-                        <a href="committee_scope_result_memo.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['committee_scope_result_memo'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">๕ รายงานผล</a>
-                        <a href="meeting_report.php?case_id=<?= $id ?>" class="whitespace-nowrap rounded-md border <?= $completion['meeting_report'] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-zinc-700' ?> px-3 py-2 hover:border-emerald-400">๖ ประชุม</a>
-                        <button
-                            type="button"
-                            class="whitespace-nowrap rounded-md border border-red-500/60 px-3 py-2 text-red-200 hover:bg-red-500/10"
-                            data-delete-case="1"
-                            data-case-id="<?= $id ?>"
-                            data-case-label="<?= h($caseLabel) ?>"
-                            data-delete-options="<?= h(json_encode($deleteOptions, JSON_UNESCAPED_UNICODE)) ?>"
-                        >ลบชุดนี้</button>
+                    <div class="history-row-progress">
+                        <span class="history-progress-label <?= $done ? 'is-done' : '' ?>"><?= $done ? 'ครบทุกหัวข้อ' : 'ดำเนินการ ' . h(historyThaiDigits((string) $row['completed_count'])) . '/๖' ?></span>
+                        <span class="history-progress-track"><span style="width:<?= (int) round($row['completed_count'] * 100 / count($documentSteps)) ?>%"></span></span>
                     </div>
-                </div>
+                    <div class="history-row-actions">
+                        <a href="<?= h($continueHref) ?>" class="history-continue"><?= $done ? 'เปิดชุดเอกสาร' : 'ทำต่อ' ?><span aria-hidden="true">↗</span></a>
+                        <details class="history-case-expand"><summary>ทุกหัวข้อ <span aria-hidden="true">⌄</span></summary>
+                            <div class="history-step-list">
+                                <div class="history-step-heading">เปิดเอกสารรายหัวข้อ</div>
+                                <?php foreach ($documentSteps as $indexKey => $step): ?>
+                                    <?php $stepDone = !empty($row['completion'][$indexKey]); ?>
+                                    <a class="history-step-link" href="<?= h($step['page']) ?>?case_id=<?= $id ?>">
+                                        <span class="history-step-indicator <?= $stepDone ? 'is-done' : '' ?>"><?= $stepDone ? '✓' : h(historyThaiDigits((string) (array_search($indexKey, array_keys($documentSteps), true) + 1))) ?></span>
+                                        <span><?= h($step['label']) ?></span>
+                                        <span class="history-step-end" aria-hidden="true">↗</span>
+                                    </a>
+                                <?php endforeach; ?>
+                                <button type="button" class="history-delete" data-delete-case="1"
+                                    data-case-id="<?= $id ?>"
+                                    data-case-label="<?= h($row['label']) ?>"
+                                    data-delete-options="<?= h((string) json_encode($row['delete_options'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>">ลบเอกสารในชุดนี้...</button>
+                            </div>
+                        </details>
+                    </div>
+                </article>
             <?php endforeach; ?>
         </div>
+        <div class="history-empty" id="history-empty" <?= $initialVisibleCount > 0 ? 'hidden' : '' ?>><?= $totalCases ? 'ไม่พบชุดเอกสารที่ตรงกับคำค้น' : 'ยังไม่มีประวัติเอกสาร' ?></div>
+        <div class="history-footer">
+            <span id="history-count" role="status" aria-live="polite">พบ <?= h(historyThaiDigits((string) $initialVisibleCount)) ?> จาก <?= h(historyThaiDigits((string) $totalCases)) ?> ชุด</span>
+            <button type="button" id="history-more" class="history-more" hidden>แสดงรายการเพิ่มเติม</button>
+        </div>
     </section>
+    <p class="history-note">กด “ทำต่อ” เพื่อเปิดขั้นตอนที่ยังไม่ครบ หรือกด “ทุกหัวข้อ” เพื่อเลือกเอกสารเฉพาะรายการ</p>
 </main>
 
-<div id="delete_modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
-    <div class="w-full max-w-xl rounded-lg border border-red-500/70 bg-zinc-950 p-5 shadow-xl">
-        <div class="text-lg font-semibold text-red-300">เลือกหัวข้อที่ต้องการลบ</div>
-        <p class="mt-3 text-sm text-red-100">
-            ชุดเอกสาร: <span id="delete_case_label" class="font-medium"></span>
-        </p>
-        <form method="post" action="document_history.php" class="mt-4">
-            <input type="hidden" name="action" value="delete_selection">
-            <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-            <input type="hidden" name="delete_mode" id="delete_mode" value="documents">
-            <input type="hidden" name="case_id" id="delete_case_id" value="">
-
-            <label class="flex items-start gap-3 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-100">
-                <input type="checkbox" id="delete_all_case" class="mt-1 h-4 w-4 rounded border-zinc-600 bg-zinc-900">
-                <span>
-                    <span class="block font-medium">ลบทั้งชุด</span>
-                    <span class="block text-xs text-red-100/80">ลบทุกหัวข้อของชุดนี้ รวมถึงประวัติ TOR ที่ผูกกับชุดนี้</span>
-                </span>
-            </label>
-
-            <div class="mt-3 rounded-md border border-zinc-800 p-3">
-                <div class="mb-2 text-sm font-medium text-zinc-200">หรือลบเฉพาะหัวข้อ</div>
-                <div id="delete_document_options" class="grid gap-2"></div>
-            </div>
-
-            <div class="mt-4 flex justify-end gap-2">
-                <button type="button" id="cancel_delete" class="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:border-zinc-500">ยกเลิก</button>
-                <button type="submit" id="confirm_delete" class="rounded-md border border-red-500/70 bg-red-500/20 px-3 py-2 text-sm font-medium text-red-100 hover:bg-red-500/30">ตกลงลบ</button>
-            </div>
-        </form>
-    </div>
-</div>
-
+<dialog id="delete_modal" class="history-modal" aria-labelledby="delete-modal-title">
+    <div class="history-modal-head"><h2 id="delete-modal-title">เลือกรายการที่ต้องการลบ</h2><button type="button" id="cancel_delete_top" class="history-modal-close" aria-label="ปิด">×</button></div>
+    <p class="history-modal-case">ชุดเอกสาร: <strong id="delete_case_label"></strong></p>
+    <form method="post" action="document_history.php" id="delete_form">
+        <input type="hidden" name="action" value="delete_selection">
+        <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+        <input type="hidden" name="delete_mode" id="delete_mode" value="documents">
+        <input type="hidden" name="case_id" id="delete_case_id" value="">
+        <label class="history-delete-all-option"><input type="checkbox" id="delete_all_case"><span><strong>ลบทั้งชุดเอกสาร</strong><small>ลบทุกหัวข้อและประวัติ TOR ที่ผูกกับชุดนี้</small></span></label>
+        <div class="history-delete-parts"><strong>หรือลบเฉพาะหัวข้อ</strong><div id="delete_document_options"></div></div>
+        <p class="history-delete-warning">การลบไม่สามารถย้อนกลับได้ กรุณาตรวจสอบก่อนยืนยัน</p>
+        <div class="history-modal-actions"><button type="button" id="cancel_delete" class="history-modal-cancel">ยกเลิก</button><button type="submit" id="confirm_delete" class="history-modal-submit" disabled>ยืนยันการลบ</button></div>
+    </form>
+</dialog>
 <script>
-const deleteModal = document.getElementById('delete_modal');
-const deleteCaseId = document.getElementById('delete_case_id');
-const deleteCaseLabel = document.getElementById('delete_case_label');
-const cancelDelete = document.getElementById('cancel_delete');
-const deleteMode = document.getElementById('delete_mode');
-const deleteAllCase = document.getElementById('delete_all_case');
-const deleteDocumentOptions = document.getElementById('delete_document_options');
-const confirmDelete = document.getElementById('confirm_delete');
-
-function renderDeleteOptions(options) {
-    deleteDocumentOptions.innerHTML = '';
-    Object.entries(options || {}).forEach(([type, option]) => {
-        const label = document.createElement('label');
-        label.className = 'flex items-center gap-3 rounded-md border border-zinc-800 px-3 py-2 text-sm text-zinc-200';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.name = 'document_types[]';
-        checkbox.value = type;
-        checkbox.className = 'delete-document-option h-4 w-4 rounded border-zinc-600 bg-zinc-900';
-        checkbox.dataset.available = option.available ? '1' : '0';
-        checkbox.disabled = !option.available;
-
-        const text = document.createElement('span');
-        text.textContent = option.label + (option.available ? '' : ' (ยังไม่มีเอกสาร)');
-        if (!option.available) text.className = 'text-zinc-500';
-
-        label.append(checkbox, text);
-        deleteDocumentOptions.appendChild(label);
-    });
-}
-
-function syncDeleteMode() {
-    const isCaseDelete = Boolean(deleteAllCase?.checked);
-    deleteMode.value = isCaseDelete ? 'case' : 'documents';
-    document.querySelectorAll('.delete-document-option').forEach((checkbox) => {
-        checkbox.disabled = isCaseDelete || checkbox.dataset.available !== '1';
-        if (isCaseDelete) checkbox.checked = false;
-    });
-}
-
-document.querySelectorAll('[data-delete-case="1"]').forEach((button) => {
-    button.addEventListener('click', () => {
-        deleteCaseId.value = button.dataset.caseId || '';
-        deleteCaseLabel.textContent = button.dataset.caseLabel || '';
-        deleteAllCase.checked = false;
-        renderDeleteOptions(JSON.parse(button.dataset.deleteOptions || '{}'));
-        syncDeleteMode();
-        deleteModal.classList.remove('hidden');
-        deleteModal.classList.add('flex');
-    });
-});
-
-function closeDeleteModal() {
-    deleteModal.classList.add('hidden');
-    deleteModal.classList.remove('flex');
-}
-
-cancelDelete?.addEventListener('click', closeDeleteModal);
-deleteAllCase?.addEventListener('change', syncDeleteMode);
-confirmDelete?.closest('form')?.addEventListener('submit', (event) => {
-    if (deleteMode.value === 'case') return;
-    const selected = document.querySelectorAll('.delete-document-option:checked');
-    if (selected.length === 0) {
-        event.preventDefault();
-        alert('กรุณาเลือกหัวข้อที่ต้องการลบ หรือเลือก "ลบทั้งชุด"');
+(() => {
+    'use strict';
+    const rows = Array.from(document.querySelectorAll('[data-history-row]'));
+    const search = document.getElementById('history-search');
+    const status = document.getElementById('history-status');
+    const form = document.getElementById('history-search-form');
+    const count = document.getElementById('history-count');
+    const empty = document.getElementById('history-empty');
+    const more = document.getElementById('history-more');
+    const clear = document.getElementById('history-clear');
+    const pageSize = 15;
+    let visibleLimit = pageSize;
+    const toAscii = {'๐':'0','๑':'1','๒':'2','๓':'3','๔':'4','๕':'5','๖':'6','๗':'7','๘':'8','๙':'9'};
+    const norm = (value) => String(value || '').toLowerCase().replace(/[๐-๙]/g, digit => toAscii[digit]);
+    const thai = (value) => String(value).replace(/[0-9]/g, digit => '๐๑๒๓๔๕๖๗๘๙'[Number(digit)]);
+    function filterRows() {
+        const needle = norm(search.value.trim());
+        const selected = status.value;
+        let matched = 0;
+        rows.forEach(row => {
+            const show = (!needle || row.dataset.search.includes(needle)) && (selected === 'all' || row.dataset.state === selected);
+            if (show) matched++;
+            row.hidden = !show || matched > visibleLimit;
+            if (!show) row.querySelectorAll('details').forEach(detail => detail.open = false);
+        });
+        count.textContent = 'พบ ' + thai(matched) + ' จาก ' + thai(rows.length) + ' ชุด';
+        empty.hidden = matched !== 0;
+        empty.textContent = rows.length ? 'ไม่พบชุดเอกสารที่ตรงกับตัวกรอง' : 'ยังไม่มีประวัติเอกสาร';
+        more.hidden = matched <= visibleLimit;
+        clear.hidden = needle === '' && selected === 'all';
     }
-});
-deleteModal?.addEventListener('click', (event) => {
-    if (event.target === deleteModal) closeDeleteModal();
-});
+    search.addEventListener('input', () => { visibleLimit = pageSize; filterRows(); });
+    status.addEventListener('change', () => { visibleLimit = pageSize; filterRows(); });
+    form.addEventListener('submit', event => { event.preventDefault(); visibleLimit = pageSize; filterRows(); });
+    more.addEventListener('click', () => { visibleLimit += pageSize; filterRows(); });
+    clear.addEventListener('click', event => {
+        event.preventDefault(); search.value = ''; status.value = 'all'; visibleLimit = pageSize;
+        filterRows();
+        if (window.history && window.history.replaceState) window.history.replaceState(null, '', 'document_history.php');
+        search.focus();
+    });
+    filterRows();
+
+    const modal = document.getElementById('delete_modal');
+    const deleteForm = document.getElementById('delete_form');
+    const deleteMode = document.getElementById('delete_mode');
+    const deleteCaseId = document.getElementById('delete_case_id');
+    const deleteCaseLabel = document.getElementById('delete_case_label');
+    const deleteAllCase = document.getElementById('delete_all_case');
+    const deleteOptions = document.getElementById('delete_document_options');
+    const confirmDelete = document.getElementById('confirm_delete');
+    function syncDeleteMode() {
+        const all = deleteAllCase.checked;
+        deleteMode.value = all ? 'case' : 'documents';
+        const boxes = Array.from(deleteOptions.querySelectorAll('input[type="checkbox"]'));
+        boxes.forEach(box => { box.disabled = all || box.dataset.available !== '1'; if (all) box.checked = false; });
+        confirmDelete.disabled = !all && !boxes.some(box => box.checked);
+    }
+    function renderDeleteOptions(options) {
+        deleteOptions.replaceChildren();
+        Object.entries(options || {}).forEach(([type, option]) => {
+            const label = document.createElement('label');
+            const input = document.createElement('input');
+            input.type = 'checkbox'; input.name = 'document_types[]'; input.value = type;
+            input.dataset.available = option.available ? '1' : '0'; input.disabled = !option.available;
+            input.addEventListener('change', syncDeleteMode);
+            const description = document.createElement('span');
+            description.textContent = option.label + (option.available ? '' : ' (ยังไม่มีเอกสาร)');
+            label.append(input, description);
+            deleteOptions.appendChild(label);
+        });
+    }
+    document.querySelectorAll('[data-delete-case="1"]').forEach(button => {
+        button.addEventListener('click', () => {
+            deleteCaseId.value = button.dataset.caseId || '';
+            deleteCaseLabel.textContent = button.dataset.caseLabel || '';
+            deleteAllCase.checked = false;
+            try { renderDeleteOptions(JSON.parse(button.dataset.deleteOptions || '{}')); }
+            catch (_) { renderDeleteOptions({}); }
+            syncDeleteMode();
+            modal.showModal();
+        });
+    });
+    deleteAllCase.addEventListener('change', syncDeleteMode);
+    document.getElementById('cancel_delete').addEventListener('click', () => modal.close());
+    document.getElementById('cancel_delete_top').addEventListener('click', () => modal.close());
+    modal.addEventListener('click', event => { if (event.target === modal) modal.close(); });
+    deleteForm.addEventListener('submit', event => {
+        if (deleteMode.value === 'case') {
+            if (!window.confirm('ยืนยันลบทั้งชุดเอกสารนี้และประวัติที่เกี่ยวข้อง?')) event.preventDefault();
+        } else if (!deleteOptions.querySelector('input[type="checkbox"]:checked')) {
+            event.preventDefault();
+        }
+    });
+})();
 </script>
 </body>
 </html>

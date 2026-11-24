@@ -500,6 +500,50 @@ if (($_GET['action'] ?? '') === 'import_progress') {
     exit;
 }
 
+// Read-only, admin-authenticated JSON search. No page reload is needed.
+// Queries are bounded and parameterized; existing write actions remain unchanged.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && in_array((string) ($_GET['action'] ?? ''), ['live_medicines', 'live_prices'], true)) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    try {
+        $kind = (string) $_GET['action'];
+        $query = trim((string) ($_GET['q'] ?? ''));
+        // No unlimited database scan from arbitrary large user input.
+        if (mb_strlen($query, 'UTF-8') > 120) $query = mb_substr($query, 0, 120, 'UTF-8');
+        $page = max(1, min(200, (int) ($_GET['page'] ?? 1)));
+        $limit = 50;
+        $offset = ($page - 1) * $limit;
+        if ($kind === 'live_medicines') {
+            $table = 'medicines';
+            $where = $query === '' ? '' : ' WHERE name LIKE ? OR unit LIKE ? OR specification LIKE ?';
+            $params = $query === '' ? [] : array_fill(0, 3, '%' . $query . '%');
+            $order = ' ORDER BY name, id';
+            $cols = 'id, name, unit, specification';
+        } else {
+            $table = 'medicine_price_references';
+            $where = $query === '' ? '' : ' WHERE medicine_name LIKE ? OR dosage_form_strength LIKE ? OR unit LIKE ? OR reference_price LIKE ?';
+            $params = $query === '' ? [] : array_fill(0, 4, '%' . $query . '%');
+            $order = ' ORDER BY medicine_name, dosage_form_strength, unit, id';
+            $cols = 'id, medicine_name, dosage_form_strength, unit, reference_price';
+        }
+        $countStmt = db()->prepare('SELECT COUNT(*) FROM ' . $table . $where);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+        $stmt = db()->prepare('SELECT ' . $cols . ' FROM ' . $table . $where . $order . ' LIMIT 50 OFFSET ' . $offset);
+        $stmt->execute($params);
+        echo json_encode([
+            'ok' => true, 'page' => $page, 'limit' => $limit,
+            'total' => $total, 'rows' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    } catch (Throwable $e) {
+        error_log('Admin live search failed: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'ไม่สามารถค้นหาได้ในขณะนี้'], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
 if (($_GET['action'] ?? '') === 'sample_medicines') {
     sendSampleXlsx('medicine_import_sample.xlsx', [
         ['ชื่อยา', 'หน่วย', 'คุณสมบัติยา'],
@@ -710,24 +754,33 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>จัดการระบบและข้อมูลยา</title>
+    <title>จัดการข้อมูลยาและเอกสาร | TOR SKP</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/backoffice-blue.css?v=20261124">
+    <link rel="stylesheet" href="assets/admin-compact.css?v=20261124b">
     <style>
         .admin-panel > summary::-webkit-details-marker { display: none; }
     </style>
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="min-h-screen bg-zinc-950 text-zinc-100 backoffice-page admin-backoffice">
 <?php require __DIR__ . '/components/navbar.php'; ?>
-<main class="mx-auto max-w-7xl px-4 py-6">
-    <div class="mb-5 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-cyan-50 p-5 sm:p-6">
-        <div>
-            <p class="text-sm font-semibold text-emerald-300">ฐานข้อมูลกลาง</p>
-            <h1 class="mt-1 text-3xl font-bold">จัดการระบบและข้อมูลยา</h1>
-            <p class="mt-2 text-sm text-zinc-400">กำหนดผู้ลงนาม ค้นหา เพิ่ม แก้ไข หรือนำเข้าข้อมูลจากหน้าเดียว</p>
-            <div class="mt-3 flex flex-wrap gap-2"><span class="ui-stat-chip">รายการยา <strong class="text-indigo-600"><?= number_format($medicineTotal) ?></strong></span><span class="ui-stat-chip">ราคาอ้างอิง <strong class="text-teal-600"><?= number_format($priceReferenceTotal) ?></strong></span></div>
-        </div>
-        <a href="tor_company_purchase.php" class="rounded-md border border-zinc-700 px-4 py-2 text-sm hover:border-emerald-400">กลับหน้าสร้างรายงาน</a>
-    </div>
+<main class="mx-auto max-w-7xl px-4 py-6 backoffice-main compact-admin-main">
+    <header class="bo-hero compact-hero">
+      <div class="bo-hero-content">
+        <p class="bo-eyebrow"><span class="bo-dot"></span> TOR SKP · ADMIN WORKSPACE</p>
+        <h1>จัดการข้อมูลหลังบ้าน</h1>
+        <p>ค้นหาและแก้ไขข้อมูลยา ราคากลาง และค่าเริ่มต้นเอกสาร ในหน้าจอเดียว</p>
+      </div>
+      <div class="compact-hero-right">
+        <span class="compact-count"><?= number_format($medicineTotal) ?> <small>รายการยา</small></span>
+        <span class="compact-count"><?= number_format($priceReferenceTotal) ?> <small>ราคาอ้างอิง</small></span>
+        <a href="tor_company_purchase.php" class="bo-hero-secondary">กลับไปสร้างเอกสาร</a>
+      </div>
+    </header>
+    <nav class="bo-section-links compact-section-nav" aria-label="หมวดจัดการข้อมูล">
+      <a href="#medicine-catalog">รายการยา</a><a href="#price-references">ราคากลางยา</a><a href="#document-signers">ผู้ลงนามเอกสาร</a>
+      <a href="change_password.php" class="compact-account-link">บัญชีผู้ใช้</a>
+    </nav>
 
     <?php if ($message): ?>
         <div class="mb-4 rounded-md border border-emerald-500/40 bg-emerald-950/60 p-3 text-sm text-emerald-100"><?= h($message) ?></div>
@@ -737,56 +790,8 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
     <?php endif; ?>
 
     <div class="grid gap-6">
-        <section class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
-            <details class="admin-panel" data-panel="signers" data-active="<?= $openSigners ? '1' : '0' ?>" open>
-                <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
-                    <span>
-                        <span class="block text-lg font-semibold">ผู้เสนอและผู้อนุมัติเอกสาร</span>
-                        <span class="mt-1 block text-sm text-zinc-400">ค่าเริ่มต้นสำหรับชุดเอกสารใหม่ โดยไม่รวมรายชื่อกรรมการ</span>
-                    </span>
-                    <span class="panel-indicator rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300">แสดง</span>
-                </summary>
-
-                <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                        <div class="text-xs font-bold text-indigo-500">หัวข้อ 1</div>
-                        <div class="mt-1 font-semibold text-indigo-900">อนุมัติหลักการ</div>
-                        <p class="mt-2 text-xs leading-5 text-indigo-700">มีผู้เสนอและผู้อนุมัติ แก้ไขค่าเริ่มต้นได้ด้านล่าง</p>
-                    </div>
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                        <div class="text-xs font-bold text-slate-400">หัวข้อ 2</div>
-                        <div class="mt-1 font-semibold text-slate-700">เชิญกรรมการ</div>
-                        <p class="mt-2 text-xs leading-5 text-slate-500">ผู้ลงนามเป็นประธานกรรมการ จัดการจากชุดกรรมการเดิม</p>
-                    </div>
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                        <div class="text-xs font-bold text-slate-400">หัวข้อ 3</div>
-                        <div class="mt-1 font-semibold text-slate-700">เอกสาร TOR</div>
-                        <p class="mt-2 text-xs leading-5 text-slate-500">มีเฉพาะลายเซ็นคณะกรรมการ จึงไม่สร้างข้อมูลซ้ำ</p>
-                    </div>
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                        <div class="text-xs font-bold text-slate-400">หัวข้อ 4</div>
-                        <div class="mt-1 font-semibold text-slate-700">รายงานประชุม</div>
-                        <p class="mt-2 text-xs leading-5 text-slate-500">มีเฉพาะลายเซ็นคณะกรรมการ จึงไม่สร้างข้อมูลซ้ำ</p>
-                    </div>
-                </div>
-
-                <form method="post" class="mt-5 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 to-white p-4 sm:p-5">
-                    <input type="hidden" name="action" value="save_document_signer_defaults">
-                    <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                    <div class="mb-4"><h2 class="font-semibold">ค่าเริ่มต้นหัวข้อ 1 — บันทึกขออนุมัติในหลักการ</h2><p class="mt-1 text-xs text-zinc-500">ชุดเอกสารที่บันทึกชื่อไว้แล้วจะยังใช้ข้อมูลเดิม ส่วนชุดใหม่หรือช่องเดิมที่ว่างจะใช้ค่านี้</p></div>
-                    <div class="grid gap-4 md:grid-cols-2">
-                        <label class="block"><span class="text-sm text-zinc-300">ชื่อผู้เสนอ</span><input name="proposer_name" value="<?= h((string) $principleSignerDefaults['proposer_name']) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"></label>
-                        <label class="block"><span class="text-sm text-zinc-300">ตำแหน่งผู้เสนอ</span><textarea name="proposer_position" rows="2" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"><?= h((string) $principleSignerDefaults['proposer_position']) ?></textarea></label>
-                        <label class="block"><span class="text-sm text-zinc-300">ชื่อผู้อนุมัติ</span><input name="approver_name" value="<?= h((string) $principleSignerDefaults['approver_name']) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"></label>
-                        <label class="block"><span class="text-sm text-zinc-300">ตำแหน่งผู้อนุมัติ</span><textarea name="approver_position" rows="2" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"><?= h((string) $principleSignerDefaults['approver_position']) ?></textarea></label>
-                    </div>
-                    <div class="mt-4 flex justify-end"><button class="rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500">บันทึกค่าผู้ลงนาม</button></div>
-                </form>
-            </details>
-        </section>
-
-        <section class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
-            <details class="admin-panel" data-panel="medicines" data-active="<?= $openMedicines ? '1' : '0' ?>" <?= $openMedicines ? 'open' : '' ?>>
+        <section id="medicine-catalog" class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
+            <details class="admin-panel" data-panel="medicines" data-active="1" open>
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span>
                     <span class="block text-lg font-semibold">รายการยา</span>
@@ -795,61 +800,16 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                 <span class="panel-indicator rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300">แสดง</span>
             </summary>
 
-            <form method="post" enctype="multipart/form-data" class="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
-                <input type="hidden" name="action" value="import_medicines">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">นำเข้ารายการยาจาก Excel/CSV UTF-8</span>
-                    <input type="file" name="medicine_file" accept=".xlsx,.csv" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
-                </label>
-                <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">นำเข้ารายการยา</button>
-                    <a href="admin.php?action=sample_medicines" class="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-emerald-400">ดาวน์โหลด Excel ตัวอย่าง</a>
-                    <span class="text-xs text-zinc-500">คอลัมน์: ชื่อยา/รายการยา, หน่วย, คุณสมบัติยา</span>
+            <form method="get" id="medicines-search-form" class="compact-find" data-live-kind="medicines">
+                <label class="compact-find-label" for="medicines-search-input">ค้นหาชื่อยา หน่วย หรือคุณสมบัติ</label>
+                <div class="compact-find-row">
+                  <input id="medicines-search-input" name="medicine_search" value="<?= h($medicineSearch) ?>" data-live-input="medicines" type="search" autocomplete="off" placeholder="พิมพ์เพื่อค้นหาทันที…" aria-controls="medicines-rows" />
+                  <button type="submit" class="compact-search-submit">ค้นหา</button>
+                  <button type="button" class="compact-clear" data-live-clear="medicines">ล้าง</button>
                 </div>
+                <p id="medicines-search-status" role="status" aria-live="polite" class="compact-status">กำลังแสดงรายการล่าสุดสูงสุด 50 รายการ</p>
             </form>
-
-            <h2 class="mt-5 text-lg font-semibold"><?= $editMedicine ? 'แก้ไขรายการยา' : 'เพิ่มรายการยาเอง' ?></h2>
-            <form method="post" class="mt-4 grid gap-3">
-                <input type="hidden" name="action" value="save_medicine">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <input type="hidden" name="id" value="<?= h((string) ($editMedicine['id'] ?? 0)) ?>">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">ชื่อยา</span>
-                    <input name="name" value="<?= h($editMedicine['name'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-zinc-300">หน่วย</span>
-                    <input name="unit" value="<?= h($editMedicine['unit'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-zinc-300">คุณสมบัติยา</span>
-                    <textarea name="specification" rows="7" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400"><?= h($editMedicine['specification'] ?? '') ?></textarea>
-                </label>
-                <div class="flex gap-3">
-                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">บันทึก</button>
-                    <?php if ($editMedicine): ?>
-                        <a href="admin.php" class="rounded-md border border-zinc-700 px-4 py-2 hover:border-emerald-400">ยกเลิก</a>
-                    <?php endif; ?>
-                </div>
-            </form>
-
-            <form method="get" class="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                <label class="min-w-0 flex-1">
-                    <span class="text-sm text-zinc-300">ค้นหารายการยา</span>
-                    <input name="medicine_search" value="<?= h($medicineSearch) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <?php if ($priceSearch !== ''): ?>
-                    <input type="hidden" name="price_search" value="<?= h($priceSearch) ?>">
-                <?php endif; ?>
-                <div class="flex justify-end gap-2">
-                    <button class="rounded-md border border-emerald-500/60 px-4 py-2 text-emerald-200 hover:bg-emerald-500/10">ค้นหา</button>
-                    <a href="admin.php" class="rounded-md border border-zinc-700 px-4 py-2 hover:border-emerald-400">ล้างข้อมูล</a>
-                </div>
-                <div class="w-full text-xs text-zinc-500">แสดงสูงสุด 50 รายการ<?= $medicineSearch !== '' ? ' จากผลการค้นหา' : '' ?></div>
-            </form>
-
-            <div class="mt-3 max-h-[775px] overflow-auto rounded-md border border-zinc-800">
+            <div class="compact-table-viewport">
                 <table class="w-full min-w-[760px] text-sm">
                     <thead class="sticky top-0 bg-zinc-950 text-zinc-300">
                     <tr>
@@ -859,7 +819,7 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                         <th class="w-36 px-3 py-2 text-right">จัดการ</th>
                     </tr>
                     </thead>
-                    <tbody class="divide-y divide-zinc-800">
+                    <tbody id="medicines-rows" class="divide-y divide-zinc-800">
                     <?php foreach ($medicines as $medicine): ?>
                         <tr>
                             <td class="px-3 py-2 align-top font-medium"><?= h($medicine['name']) ?></td>
@@ -879,10 +839,65 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                     </tbody>
                 </table>
             </div>
+            <div class="compact-pager" data-live-pager="medicines" aria-label="เลื่อนหน้าผลการค้นหา">
+                <span id="medicines-page-info">แสดงสูงสุด 50 รายการแรก</span>
+                <div><button type="button" data-live-prev="medicines" disabled>ก่อนหน้า</button><button type="button" data-live-next="medicines">ถัดไป</button></div>
+            </div>
+            <div class="compact-utility-row">
+              <details class="compact-tool" id="medicines-edit-box"  <?= $editMedicine ? 'open' : '' ?>>
+                <summary>เพิ่ม / แก้ไขรายการยา</summary>
+                <div class="compact-tool-content">
+            <h2 class="mt-5 text-lg font-semibold"><?= $editMedicine ? 'แก้ไขรายการยา' : 'เพิ่มรายการยาเอง' ?></h2>
+            <form method="post" class="mt-4 grid gap-3">
+                <input type="hidden" name="action" value="save_medicine">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <input type="hidden" name="id" value="<?= h((string) ($editMedicine['id'] ?? 0)) ?>">
+                <label class="block">
+                    <span class="text-sm text-zinc-300">ชื่อยา</span>
+                    <input name="name" value="<?= h($editMedicine['name'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-zinc-300">หน่วย</span>
+                    <input name="unit" value="<?= h($editMedicine['unit'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-zinc-300">คุณสมบัติยา</span>
+                    <textarea name="specification" rows="4" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400"><?= h($editMedicine['specification'] ?? '') ?></textarea>
+                </label>
+                <div class="flex gap-3">
+                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">บันทึก</button>
+                    <?php if ($editMedicine): ?>
+                        <a href="admin.php" class="rounded-md border border-zinc-700 px-4 py-2 hover:border-emerald-400">ยกเลิก</a>
+                    <?php endif; ?>
+                </div>
+            </form>
+
+                </div>
+              </details>
+              <details class="compact-tool" id="medicines-import-box">
+                <summary>นำเข้า Excel / CSV</summary>
+                <div class="compact-tool-content">
+            <form method="post" enctype="multipart/form-data" class="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
+                <input type="hidden" name="action" value="import_medicines">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <label class="block">
+                    <span class="text-sm text-zinc-300">นำเข้ารายการยาจาก Excel/CSV UTF-8</span>
+                    <input type="file" name="medicine_file" accept=".xlsx,.csv" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
+                </label>
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">นำเข้ารายการยา</button>
+                    <a href="admin.php?action=sample_medicines" class="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-emerald-400">ดาวน์โหลด Excel ตัวอย่าง</a>
+                    <span class="text-xs text-zinc-500">คอลัมน์: ชื่อยา/รายการยา, หน่วย, คุณสมบัติยา</span>
+                </div>
+            </form>
+
+                </div>
+              </details>
+            </div>
             </details>
         </section>
 
-        <section class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
+        <section id="price-references" class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
             <details class="admin-panel" data-panel="prices" data-active="<?= $openPrices ? '1' : '0' ?>" <?= $openPrices ? 'open' : '' ?>>
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span>
@@ -891,26 +906,55 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                 </span>
                 <span class="panel-indicator rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300">แสดง</span>
             </summary>
-            <form id="price_import_form" method="post" enctype="multipart/form-data" class="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
-                <input type="hidden" name="action" value="import_price_refs">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <input type="hidden" id="import_id" name="import_id" value="">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">นำเข้า Excel/CSV</span>
-                    <input type="file" name="price_file" accept=".xlsx,.csv" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
-                </label>
-                <label class="mt-3 flex items-center gap-2 text-sm text-zinc-300">
-                    <input type="checkbox" name="clear_existing" value="1" class="rounded border-zinc-700 bg-zinc-950">
-                    ล้างข้อมูลเดิมก่อนนำเข้า
-                </label>
-                <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <button id="import_button" class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">นำเข้า</button>
-                    <a href="admin.php?action=sample_price_refs" class="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-emerald-400">ดาวน์โหลด Excel ตัวอย่าง</a>
-                    <span id="import_status" class="text-sm text-zinc-400">ยังไม่ได้นำเข้า</span>
+            <form method="get" id="prices-search-form" class="compact-find" data-live-kind="prices">
+                <label class="compact-find-label" for="prices-search-input">ค้นหาชื่อยา รูปแบบยา หน่วย หรือราคา</label>
+                <div class="compact-find-row">
+                  <input id="prices-search-input" name="price_search" value="<?= h($priceSearch) ?>" data-live-input="prices" type="search" autocomplete="off" placeholder="พิมพ์เพื่อค้นหาทันที…" aria-controls="prices-rows" />
+                  <button type="submit" class="compact-search-submit">ค้นหา</button>
+                  <button type="button" class="compact-clear" data-live-clear="prices">ล้าง</button>
                 </div>
-                <p class="mt-2 text-xs text-zinc-500">คอลัมน์ที่รองรับ: รายการยา, รูปแบบยาและความแรง, หน่วย, ราคากลางยาต่อหน่วย (บาท)</p>
+                <p id="prices-search-status" role="status" aria-live="polite" class="compact-status">กำลังแสดงรายการล่าสุดสูงสุด 50 รายการ</p>
             </form>
-
+            <div class="compact-table-viewport">
+                <table class="w-full min-w-[860px] text-sm">
+                    <thead class="sticky top-0 bg-zinc-950 text-zinc-300">
+                    <tr>
+                        <th class="px-3 py-2 text-left">รายการยา</th>
+                        <th class="px-3 py-2 text-left">รูปแบบยาและความแรง</th>
+                        <th class="w-32 px-3 py-2 text-left">หน่วย</th>
+                        <th class="w-36 px-3 py-2 text-right">ราคา/หน่วย</th>
+                        <th class="w-36 px-3 py-2 text-right">จัดการ</th>
+                    </tr>
+                    </thead>
+                    <tbody id="prices-rows" class="divide-y divide-zinc-800">
+                    <?php foreach ($priceRefs as $row): ?>
+                        <tr>
+                            <td class="px-3 py-2 align-top font-medium"><?= h($row['medicine_name']) ?></td>
+                            <td class="px-3 py-2 align-top text-zinc-300"><?= h($row['dosage_form_strength']) ?></td>
+                            <td class="px-3 py-2 align-top"><?= h($row['unit']) ?></td>
+                            <td class="px-3 py-2 align-top text-right"><?= number_format((float) $row['reference_price'], 2) ?></td>
+                            <td class="px-3 py-2 align-top text-right">
+                                <a href="admin.php?edit_price=<?= (int) $row['id'] ?>" class="text-emerald-300 hover:text-emerald-200">แก้ไข</a>
+                                <form method="post" class="ml-3 inline" onsubmit="return confirm('ยืนยันลบราคากลางยานี้?')">
+                                    <input type="hidden" name="action" value="delete_price_ref">
+                                    <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                                    <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
+                                    <button class="text-red-300 hover:text-red-200">ลบ</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="compact-pager" data-live-pager="prices" aria-label="เลื่อนหน้าผลการค้นหา">
+                <span id="prices-page-info">แสดงสูงสุด 50 รายการแรก</span>
+                <div><button type="button" data-live-prev="prices" disabled>ก่อนหน้า</button><button type="button" data-live-next="prices">ถัดไป</button></div>
+            </div>
+            <div class="compact-utility-row">
+              <details class="compact-tool" id="prices-edit-box"  <?= $editPrice ? 'open' : '' ?>>
+                <summary>เพิ่ม / แก้ไขราคากลาง</summary>
+                <div class="compact-tool-content">
             <form method="post" class="mt-5 grid gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-4">
                 <h3 class="font-medium"><?= $editPrice ? 'แก้ไขราคากลางยา' : 'เพิ่มราคากลางยาเอง' ?></h3>
                 <input type="hidden" name="action" value="save_price_ref">
@@ -942,55 +986,63 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                 </div>
             </form>
 
-            <form method="get" class="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                <label class="min-w-0 flex-1">
-                    <span class="text-sm text-zinc-300">ค้นหาราคากลางอ้างอิง</span>
-                    <input name="price_search" value="<?= h($priceSearch) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <?php if ($medicineSearch !== ''): ?>
-                    <input type="hidden" name="medicine_search" value="<?= h($medicineSearch) ?>">
-                <?php endif; ?>
-                <div class="flex justify-end gap-2">
-                    <button class="rounded-md border border-emerald-500/60 px-4 py-2 text-emerald-200 hover:bg-emerald-500/10">ค้นหา</button>
-                    <a href="admin.php" class="rounded-md border border-zinc-700 px-4 py-2 hover:border-emerald-400">ล้างข้อมูล</a>
                 </div>
-                <div class="w-full text-xs text-zinc-500">แสดงสูงสุด 50 รายการ<?= $priceSearch !== '' ? ' จากผลการค้นหา' : '' ?></div>
+              </details>
+              <details class="compact-tool" id="prices-import-box">
+                <summary>นำเข้า Excel / CSV</summary>
+                <div class="compact-tool-content">
+            <form id="price_import_form" method="post" enctype="multipart/form-data" class="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
+                <input type="hidden" name="action" value="import_price_refs">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <input type="hidden" id="import_id" name="import_id" value="">
+                <label class="block">
+                    <span class="text-sm text-zinc-300">นำเข้า Excel/CSV</span>
+                    <input type="file" name="price_file" accept=".xlsx,.csv" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
+                </label>
+                <label class="mt-3 flex items-center gap-2 text-sm text-zinc-300">
+                    <input type="checkbox" name="clear_existing" value="1" class="rounded border-zinc-700 bg-zinc-950">
+                    ล้างข้อมูลเดิมก่อนนำเข้า
+                </label>
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <button id="import_button" class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">นำเข้า</button>
+                    <a href="admin.php?action=sample_price_refs" class="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-emerald-400">ดาวน์โหลด Excel ตัวอย่าง</a>
+                    <span id="import_status" class="text-sm text-zinc-400">ยังไม่ได้นำเข้า</span>
+                </div>
+                <p class="mt-2 text-xs text-zinc-500">คอลัมน์ที่รองรับ: รายการยา, รูปแบบยาและความแรง, หน่วย, ราคากลางยาต่อหน่วย (บาท)</p>
             </form>
 
-            <div class="mt-3 max-h-[620px] overflow-auto rounded-md border border-zinc-800">
-                <table class="w-full min-w-[860px] text-sm">
-                    <thead class="sticky top-0 bg-zinc-950 text-zinc-300">
-                    <tr>
-                        <th class="px-3 py-2 text-left">รายการยา</th>
-                        <th class="px-3 py-2 text-left">รูปแบบยาและความแรง</th>
-                        <th class="w-32 px-3 py-2 text-left">หน่วย</th>
-                        <th class="w-36 px-3 py-2 text-right">ราคา/หน่วย</th>
-                        <th class="w-36 px-3 py-2 text-right">จัดการ</th>
-                    </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-800">
-                    <?php foreach ($priceRefs as $row): ?>
-                        <tr>
-                            <td class="px-3 py-2 align-top font-medium"><?= h($row['medicine_name']) ?></td>
-                            <td class="px-3 py-2 align-top text-zinc-300"><?= h($row['dosage_form_strength']) ?></td>
-                            <td class="px-3 py-2 align-top"><?= h($row['unit']) ?></td>
-                            <td class="px-3 py-2 align-top text-right"><?= number_format((float) $row['reference_price'], 2) ?></td>
-                            <td class="px-3 py-2 align-top text-right">
-                                <a href="admin.php?edit_price=<?= (int) $row['id'] ?>" class="text-emerald-300 hover:text-emerald-200">แก้ไข</a>
-                                <form method="post" class="ml-3 inline" onsubmit="return confirm('ยืนยันลบราคากลางยานี้?')">
-                                    <input type="hidden" name="action" value="delete_price_ref">
-                                    <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                                    <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
-                                    <button class="text-red-300 hover:text-red-200">ลบ</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
+                </div>
+              </details>
             </div>
             </details>
         </section>
+        <section id="document-signers" class="rounded-lg border border-zinc-800 bg-zinc-900/80 p-5">
+            <details class="admin-panel" data-panel="signers" data-active="<?= $openSigners ? '1' : '0' ?>" <?= $openSigners ? 'open' : '' ?>>
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span>
+                        <span class="block text-lg font-semibold">ผู้เสนอและผู้อนุมัติเอกสาร</span>
+                        <span class="mt-1 block text-sm text-zinc-400">ค่าเริ่มต้นสำหรับชุดเอกสารใหม่ โดยไม่รวมรายชื่อกรรมการ</span>
+                    </span>
+                    <span class="panel-indicator rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300">แสดง</span>
+                </summary>
+
+                <p class="compact-subnote">ค่าเริ่มต้นสำหรับบันทึกขออนุมัติในหลักการ (หัวข้อ 1) · เอกสารอื่นใช้ผู้ลงนามตามชุดเอกสารที่บันทึกไว้</p>
+
+                <form method="post" class="mt-5 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 to-white p-4 sm:p-5">
+                    <input type="hidden" name="action" value="save_document_signer_defaults">
+                    <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                    <div class="mb-4"><h2 class="font-semibold">ค่าเริ่มต้นหัวข้อ 1 — บันทึกขออนุมัติในหลักการ</h2><p class="mt-1 text-xs text-zinc-500">ชุดเอกสารที่บันทึกชื่อไว้แล้วจะยังใช้ข้อมูลเดิม ส่วนชุดใหม่หรือช่องเดิมที่ว่างจะใช้ค่านี้</p></div>
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <label class="block"><span class="text-sm text-zinc-300">ชื่อผู้เสนอ</span><input name="proposer_name" value="<?= h((string) $principleSignerDefaults['proposer_name']) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"></label>
+                        <label class="block"><span class="text-sm text-zinc-300">ตำแหน่งผู้เสนอ</span><textarea name="proposer_position" rows="2" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"><?= h((string) $principleSignerDefaults['proposer_position']) ?></textarea></label>
+                        <label class="block"><span class="text-sm text-zinc-300">ชื่อผู้อนุมัติ</span><input name="approver_name" value="<?= h((string) $principleSignerDefaults['approver_name']) ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"></label>
+                        <label class="block"><span class="text-sm text-zinc-300">ตำแหน่งผู้อนุมัติ</span><textarea name="approver_position" rows="2" class="mt-1 w-full rounded-md border border-zinc-700 bg-white px-3 py-2 outline-none"><?= h((string) $principleSignerDefaults['approver_position']) ?></textarea></label>
+                    </div>
+                    <div class="mt-4 flex justify-end"><button class="rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500">บันทึกค่าผู้ลงนาม</button></div>
+                </form>
+            </details>
+        </section>
+
     </div>
 </main>
 <script>
@@ -1012,6 +1064,154 @@ document.querySelectorAll('.admin-panel').forEach((panel) => {
     });
     updateIndicator();
 });
+
+// Real-time search is read-only. Saving, deletion and import still use their original forms.
+(function () {
+    'use strict';
+    const tokenField = document.querySelector('input[name="csrf_token"]');
+    const csrfToken = tokenField ? tokenField.value : '';
+    const configs = {
+        medicines: { endpoint: 'live_medicines', param: 'medicine_search', tbody: 'medicines-rows', columns: 4 },
+        prices: { endpoint: 'live_prices', param: 'price_search', tbody: 'prices-rows', columns: 5 }
+    };
+    const addCell = (row, value, className) => {
+        const cell = document.createElement('td');
+        cell.className = className || 'px-3 py-2 align-top';
+        cell.textContent = String(value ?? '');
+        row.appendChild(cell);
+        return cell;
+    };
+    const hidden = (form, name, value) => {
+        const field = document.createElement('input');
+        field.type = 'hidden'; field.name = name; field.value = String(value);
+        form.appendChild(field);
+    };
+    function appendActions(row, kind, id) {
+        const cell = document.createElement('td');
+        cell.className = 'px-3 py-2 align-top text-right compact-row-actions';
+        const edit = document.createElement('a');
+        edit.href = 'admin.php?' + (kind === 'medicines' ? 'edit_medicine=' : 'edit_price=') + encodeURIComponent(String(id));
+        edit.textContent = 'แก้ไข';
+        cell.appendChild(edit);
+        const form = document.createElement('form');
+        form.method = 'post'; form.className = 'ml-3 inline';
+        form.addEventListener('submit', (event) => {
+            if (!confirm(kind === 'medicines' ? 'ยืนยันลบรายการยานี้?' : 'ยืนยันลบราคากลางยานี้?')) event.preventDefault();
+        });
+        hidden(form, 'action', kind === 'medicines' ? 'delete_medicine' : 'delete_price_ref');
+        hidden(form, 'csrf_token', csrfToken);
+        hidden(form, 'id', id);
+        const del = document.createElement('button');
+        del.type = 'submit'; del.textContent = 'ลบ'; del.className = 'compact-delete';
+        form.appendChild(del); cell.appendChild(form); row.appendChild(cell);
+    }
+    function buildRows(kind, rows, tbody, span) {
+        const frag = document.createDocumentFragment();
+        if (!rows.length) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td'); td.colSpan = span;
+            td.className = 'compact-empty'; td.textContent = 'ไม่พบรายการที่ตรงกับคำค้นหา';
+            tr.appendChild(td); frag.appendChild(tr);
+        }
+        rows.forEach((item) => {
+            const tr = document.createElement('tr');
+            if (kind === 'medicines') {
+                addCell(tr, item.name, 'px-3 py-2 align-top font-medium');
+                addCell(tr, item.unit);
+                addCell(tr, item.specification, 'px-3 py-2 align-top compact-spec');
+            } else {
+                addCell(tr, item.medicine_name, 'px-3 py-2 align-top font-medium');
+                addCell(tr, item.dosage_form_strength, 'px-3 py-2 align-top compact-spec');
+                addCell(tr, item.unit);
+                const price = Number(item.reference_price);
+                addCell(tr, Number.isFinite(price) ? price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : item.reference_price,
+                    'px-3 py-2 align-top text-right');
+            }
+            appendActions(tr, kind, Number(item.id));
+            frag.appendChild(tr);
+        });
+        tbody.replaceChildren(frag);
+    }
+    Object.entries(configs).forEach(([kind, config]) => {
+        const form = document.getElementById(kind + '-search-form');
+        const input = document.getElementById(kind + '-search-input');
+        const tbody = document.getElementById(config.tbody);
+        const status = document.getElementById(kind + '-search-status');
+        const info = document.getElementById(kind + '-page-info');
+        const prev = document.querySelector('[data-live-prev="' + kind + '"]');
+        const next = document.querySelector('[data-live-next="' + kind + '"]');
+        const clear = document.querySelector('[data-live-clear="' + kind + '"]');
+        if (!form || !input || !tbody || !status || !prev || !next || !clear) return;
+        let controller = null, timer = null, revision = 0, page = 1, total = 0;
+        function updateUrl() {
+            try {
+                const url = new URL(window.location.href);
+                const query = input.value.trim();
+                if (query) url.searchParams.set(config.param, query);
+                else url.searchParams.delete(config.param);
+                window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+            } catch (_error) { /* Search still works if history is restricted. */ }
+        }
+        async function refresh() {
+            const serial = ++revision;
+            if (controller) controller.abort();
+            controller = new AbortController();
+            status.textContent = 'กำลังค้นหา…';
+            status.dataset.state = 'loading';
+            try {
+                const params = new URLSearchParams({action: config.endpoint, q: input.value.trim(), page:String(page)});
+                const response = await fetch('admin.php?' + params, {
+                    credentials:'same-origin', signal: controller.signal,
+                    headers: {'Accept':'application/json'}, cache:'no-store'
+                });
+                if (!response.ok) throw new Error('Search unavailable');
+                const data = await response.json();
+                if (serial !== revision || !data.ok || !Array.isArray(data.rows)) return;
+                total = Number(data.total) || 0;
+                buildRows(kind, data.rows, tbody, config.columns);
+                const count = data.rows.length;
+                const start = count ? ((page - 1) * 50 + 1) : 0;
+                const end = count ? start + count - 1 : 0;
+                status.textContent = 'พบ ' + total.toLocaleString('th-TH') + ' รายการ · แสดง ' + start + '–' + end;
+                status.dataset.state = 'ready';
+                info.textContent = 'หน้า ' + page.toLocaleString('th-TH') + ' จาก ' + Math.max(1, Math.ceil(total / 50)).toLocaleString('th-TH');
+                prev.disabled = page <= 1;
+                next.disabled = page * 50 >= total;
+                const viewport = tbody.closest('.compact-table-viewport');
+                if (viewport) viewport.scrollTop = 0;
+                updateUrl();
+            } catch (error) {
+                if (error.name === 'AbortError' || serial !== revision) return;
+                status.textContent = 'ค้นหาไม่สำเร็จ กรุณาลองใหม่'; status.dataset.state = 'error';
+            }
+        }
+        function schedule() {
+            page = 1;
+            clearTimeout(timer);
+            // Abort immediately, so an older response cannot replace the user's latest query.
+            revision++;
+            if (controller) controller.abort();
+            status.textContent = 'กำลังค้นหา…';
+            timer = setTimeout(refresh, 260);
+        }
+        input.addEventListener('input', schedule);
+        form.addEventListener('submit', (event) => {event.preventDefault(); clearTimeout(timer); page = 1; refresh();});
+        clear.addEventListener('click', () => {input.value = ''; schedule(); input.focus();});
+        prev.addEventListener('click', () => {if (page > 1) {page--; refresh();}});
+        next.addEventListener('click', () => {if (page * 50 < total) {page++; refresh();}});
+        refresh();
+    });
+    // Editing via its existing URL remains compatible; reveal the relevant form.
+    const params = new URLSearchParams(location.search);
+    const editBox = params.has('edit_medicine') ? document.getElementById('medicines-edit-box') :
+        params.has('edit_price') ? document.getElementById('prices-edit-box') : null;
+    if (editBox) {
+        editBox.open = true;
+        const parent = editBox.closest('.admin-panel');
+        if (parent) parent.open = true;
+        requestAnimationFrame(() => editBox.scrollIntoView({block:'center'}));
+    }
+})();
 
 const importForm = document.getElementById('price_import_form');
 const importStatus = document.getElementById('import_status');

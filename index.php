@@ -4,8 +4,9 @@ require __DIR__ . '/core/config.php';
 require __DIR__ . '/core/auth.php';
 requireLogin();
 
-function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
+function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
+// Keep the original workflow routes, their order, and availability unchanged.
 $workflows = [
     [
         'title' => 'จัดซื้อยาในบัญชี GPO',
@@ -35,92 +36,83 @@ $workflows = [
         'documents' => [],
     ],
 ];
+$activeWorkflow = null;
+$inactiveWorkflows = [];
+foreach ($workflows as $workflow) {
+    if ($workflow['enabled'] && $activeWorkflow === null) {
+        $activeWorkflow = $workflow;
+    } elseif (!$workflow['enabled']) {
+        $inactiveWorkflows[] = $workflow;
+    }
+}
+$thaiNumbers = ['0'=>'๐', '1'=>'๑', '2'=>'๒', '3'=>'๓', '4'=>'๔', '5'=>'๕', '6'=>'๖', '7'=>'๗', '8'=>'๘', '9'=>'๙'];
+$documents = $activeWorkflow['documents'] ?? [];
 ?>
 <!doctype html>
 <html lang="th">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dashboard ออกเอกสาร TOR</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>หน้าหลัก | ระบบจัดทำเอกสาร TOR</title>
+    <meta name="description" content="หน้าหลักระบบจัดทำเอกสาร TOR และเอกสารจัดซื้อจัดจ้าง">
+    <link rel="stylesheet" href="assets/home-blue.css?v=20261124-2">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100">
+<body class="torskp-home-body">
 <?php require __DIR__ . '/components/navbar.php'; ?>
-<main class="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-9">
-    <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/80">
-        <div class="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-800 px-5 py-6 sm:px-7">
-            <div>
-                <p class="text-sm font-semibold text-emerald-300">ระบบออกเอกสารจัดซื้อ</p>
-                <h1 class="mt-1 text-3xl font-bold">เริ่มจัดทำเอกสาร TOR</h1>
-                <p class="mt-2 max-w-2xl text-sm text-zinc-400">เลือกประเภทการจัดซื้อ แล้วดำเนินการตามหัวข้อที่ ๑–๖ ข้อมูลของแต่ละชุดจะเชื่อมถึงกันอัตโนมัติ</p>
+<main class="torskp-home" id="main-content">
+    <section class="home-hero hero" aria-labelledby="home-title">
+        <div class="home-hero-content">
+            <div class="home-eyebrow"><span class="home-eyebrow-dot" aria-hidden="true"></span> TOR REPORT · DOCUMENT WORKSPACE</div>
+            <h1 id="home-title">ระบบจัดทำเอกสาร TOR</h1>
+            <p>เริ่มงานจัดซื้อหรือกลับไปทำชุดเอกสารเดิม จัดลำดับเอกสารตามกระบวนงานทั้ง <?= h(strtr((string) count($documents), $thaiNumbers)) ?> ขั้นตอนในหน้าเดียว</p>
+            <div class="home-hero-actions">
+                <a class="home-button home-button-primary" href="<?= h($documents[0]['href'] ?? 'document_history.php') ?>">
+                    <span aria-hidden="true">＋</span> เริ่มจัดทำเอกสาร
+                </a>
+                <a class="home-button home-button-outline" href="document_history.php">เปิดชุดเอกสารเดิม <span aria-hidden="true">↗</span></a>
             </div>
-            <a href="document_history.php" class="rounded-md border border-zinc-700 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-indigo-400">เปิดชุดเอกสารเดิม</a>
         </div>
+        <div class="home-hero-decor" aria-hidden="true"><span></span><span></span><span></span></div>
+    </section>
 
-        <div class="grid gap-4 p-5 sm:p-7">
-            <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
-                <div>
-                    <div class="text-sm font-semibold text-indigo-900">ประเภทงานที่พร้อมใช้งาน</div>
-                    <div class="mt-0.5 text-xs text-indigo-600">ขณะนี้เปิดระบบจัดซื้อยาในบัญชีผ่านบริษัท</div>
-                </div>
-                <span class="ui-stat-chip"><strong class="text-indigo-600">1</strong> จาก 4 ประเภท</span>
+    <section class="home-workflow" aria-labelledby="workflow-title">
+        <div class="home-workflow-head">
+            <div class="home-workflow-heading">
+                <div class="home-section-kicker">ประเภทงานที่พร้อมใช้งาน</div>
+                <h2 id="workflow-title"><?= h($activeWorkflow['title'] ?? 'เอกสารจัดซื้อ') ?></h2>
+                <p>เลือกเอกสารที่ต้องการจัดทำตามขั้นตอน ข้อมูลแต่ละชุดสามารถเชื่อมโยงกันผ่านหมายเลขชุดเอกสาร</p>
             </div>
-            <?php foreach ($workflows as $workflowIndex => $workflow): ?>
-                <div class="workflow-card overflow-hidden rounded-xl border <?= $workflow['enabled'] ? 'border-emerald-500/50 bg-white' : 'border-zinc-800 bg-zinc-950/70' ?>">
-                    <div class="flex items-center gap-3 px-4 py-4 sm:px-5">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl <?= $workflow['enabled'] ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-400' ?> text-sm font-bold shadow-sm">
-                            <?= $workflowIndex + 1 ?>
+            <a href="document_history.php" class="home-history-link">ประวัติเอกสาร <span aria-hidden="true">↗</span></a>
+        </div>
+        <?php if ($documents): ?>
+            <ol class="home-stage-list" aria-label="รายการเอกสารตามขั้นตอน">
+                <?php foreach ($documents as $index => $document): ?>
+                    <li class="home-stage<?= $index === 0 ? ' home-stage-first' : '' ?>">
+                        <span class="home-stage-num" aria-label="ขั้นตอน <?= $index + 1 ?>"><?= h(strtr((string) ($index + 1), $thaiNumbers)) ?></span>
+                        <div class="home-stage-text">
+                            <div class="home-stage-title"><?= h($document['title']) ?></div>
+                            <?php if (!empty($document['note'])): ?><div class="home-stage-note"><?= h($document['note']) ?></div><?php endif; ?>
                         </div>
-                        <button type="button" class="workflow-toggle flex flex-1 items-center justify-between gap-3 text-left font-semibold <?= $workflow['enabled'] ? 'text-emerald-100' : 'text-zinc-400' ?>" aria-expanded="<?= $workflow['enabled'] ? 'true' : 'false' ?>">
-                            <span><span class="block"><?= h($workflow['title']) ?></span><span class="mt-0.5 block text-xs font-normal text-zinc-500"><?= $workflow['enabled'] ? 'พร้อมจัดทำเอกสาร ๖ ขั้นตอน' : 'ยังไม่เปิดใช้งาน' ?></span></span>
-                            <span class="workflow-icon rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-zinc-500"><?= $workflow['enabled'] ? 'ซ่อน' : 'ดู' ?></span>
-                        </button>
-                        <?php if (!$workflow['enabled']): ?>
-                            <span class="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-500">ยังไม่ลิงก์</span>
-                        <?php endif; ?>
-                    </div>
+                        <a class="home-stage-action" href="<?= h($document['href']) ?>" aria-label="เปิดขั้นตอน <?= $index + 1 ?>: <?= h($document['title']) ?>">
+                            เปิดเอกสาร <span aria-hidden="true">↗</span>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+            </ol>
+        <?php else: ?>
+            <div class="home-no-workflow">ยังไม่มีประเภทงานที่เปิดให้ใช้งาน</div>
+        <?php endif; ?>
+    </section>
 
-                    <div class="workflow-panel <?= $workflow['enabled'] ? '' : 'hidden' ?> border-t <?= $workflow['enabled'] ? 'border-emerald-500/30' : 'border-zinc-800' ?>">
-                    <?php if ($workflow['enabled']): ?>
-                        <div class="divide-y divide-zinc-800">
-                            <?php foreach ($workflow['documents'] as $index => $document): ?>
-                                <div class="grid gap-3 px-4 py-4 md:grid-cols-[2.25rem_1fr_auto] md:items-center sm:px-5">
-                                    <div class="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-sm font-bold text-indigo-600"><?= strtr((string) ($index + 1), ['0'=>'๐','1'=>'๑','2'=>'๒','3'=>'๓','4'=>'๔','5'=>'๕','6'=>'๖','7'=>'๗','8'=>'๘','9'=>'๙']) ?></div>
-                                    <div>
-                                        <div class="font-medium text-zinc-100"><?= h($document['title']) ?></div>
-                                        <?php if (!empty($document['note'])): ?>
-                                            <div class="mt-1 text-sm text-emerald-300"><?= h($document['note']) ?></div>
-                                        <?php endif; ?>
-                                    </div>
-                                    <a href="<?= h($document['href']) ?>" class="inline-flex justify-center rounded-md border border-emerald-500/60 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/10">
-                                        เริ่มทำหัวข้อนี้
-                                    </a>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <div class="px-4 py-4 text-sm text-zinc-500">ยังไม่เปิดใช้งานในขั้นตอนนี้</div>
-                    <?php endif; ?>
-                    </div>
-                </div>
+    <section class="home-upcoming" aria-labelledby="upcoming-title">
+        <div class="home-upcoming-title" id="upcoming-title">ประเภทงานอื่น <span class="home-upcoming-count"><?= h(strtr((string) count($inactiveWorkflows), $thaiNumbers)) ?> รายการ</span></div>
+        <div class="home-upcoming-list">
+            <?php foreach ($inactiveWorkflows as $workflow): ?>
+                <span class="home-upcoming-item"><span class="home-upcoming-dot" aria-hidden="true"></span><?= h($workflow['title']) ?><span class="home-upcoming-status">ยังไม่เปิดใช้งาน</span></span>
             <?php endforeach; ?>
         </div>
     </section>
+    <footer class="home-footer">ระบบจัดทำเอกสาร TOR · เลือกขั้นตอนตามลำดับ หรือเปิดงานเดิมจากประวัติเอกสาร</footer>
 </main>
-<script>
-document.querySelectorAll('.workflow-toggle').forEach((button) => {
-    button.addEventListener('click', () => {
-        const card = button.closest('.workflow-card');
-        const panel = card?.querySelector('.workflow-panel');
-        const icon = button.querySelector('.workflow-icon');
-        if (!panel) return;
-
-        const expanded = button.getAttribute('aria-expanded') === 'true';
-        button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-        panel.classList.toggle('hidden', expanded);
-        if (icon) icon.textContent = expanded ? 'ดู' : 'ซ่อน';
-    });
-});
-</script>
 </body>
 </html>

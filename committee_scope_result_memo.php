@@ -27,7 +27,7 @@ function committeeResultDocumentHtml(array $values, string $memoNo, string $docD
     ?>
           <section class="memo-sheet">
             <table class="memo-head" role="presentation"><tr><td style="width:3cm"><img src="<?= h($garudaSrc) ?>" class="garuda" alt="ตราครุฑ"></td><td class="memo-heading">บันทึกข้อความ</td><td style="width:3cm">&nbsp;</td></tr></table>
-            <div class="memo-meta"><span class="memo-label">ส่วนราชการ</span><span class="memo-value" data-memo-output="office"><?=h($values['office'])?></span></div>
+            <div class="memo-meta"><span class="memo-label">ส่วนราชการ</span><span class="memo-value memo-office-value" data-memo-output="office" style="font-size:15pt!important;letter-spacing:-0.12pt;white-space:nowrap"><?=h($values['office'])?></span></div>
             <div class="memo-meta-no"><span class="memo-label">ที่</span><span class="memo-value">ชม ๕๑๐๐๖.๑๓.๑/<span data-memo-output="memo_no_suffix" data-digits="thai"><?=h(thaiMemoDigits($memoNo))?></span></span><span class="memo-label">วันที่</span><span class="memo-value" data-memo-output="doc_date" data-digits="thai"><?=h(thaiMemoDigits($docDate))?></span></div>
             <div class="memo-meta"><span class="memo-label">เรื่อง</span><span class="memo-value" data-memo-output="subject"><?=h($values['subject'])?></span></div>
             <div class="memo-meta" style="margin-top:8pt"><span class="memo-label">เรียน</span><span class="memo-value" data-memo-output="recipient"><?=h($values['recipient'])?></span></div>
@@ -58,7 +58,7 @@ function committeeResultDocumentHtml(array $values, string $memoNo, string $docD
 function committeeResultWordCss(): string
 {
     return <<<'CSS'
-@page{size:A4;margin:25mm 20mm 20mm 30mm;}
+@page{size:A4;margin:15mm 20mm 20mm 30mm;}
 body{margin:0;color:#111;font-family:"TH SarabunIT๙","TH Sarabun New",sans-serif;font-size:16pt;line-height:1.05;}
 .memo-sheet{width:160mm;min-height:0;margin:0;padding:0;color:#111;font-family:"TH SarabunIT๙","TH Sarabun New",sans-serif;font-size:16pt;line-height:1.07;}
 .memo-sheet+.memo-sheet{page-break-before:always;break-before:page;}
@@ -70,6 +70,7 @@ body{margin:0;color:#111;font-family:"TH SarabunIT๙","TH Sarabun New",sans-ser
 .memo-meta,.memo-meta-no{margin:2pt 0;}
 .memo-label{font-size:20pt;font-weight:bold;}
 .memo-value{font-size:16pt;}
+.memo-office-value{font-size:15pt!important;white-space:nowrap;letter-spacing:-0.12pt;}
 .memo-section{font-weight:bold;margin:8pt 0 3pt;text-indent:2.5cm;}
 .memo-paragraph{font-size:16pt;line-height:1.05;text-indent:2.5cm;margin:0 0 5pt;white-space:pre-line;text-align:justify;}
 .memo-signatures{margin-top:14pt;text-align:center;}
@@ -251,7 +252,7 @@ if (($_POST['action'] ?? '') === 'word_document') {
   .result-empty h2 { font-size:18px; margin:0 0 8px; color:#172033; }
   .result-empty p { margin:0; font-size:13px; }
   /* A4 document canvas is deliberately isolated from the application's UI. */
-  .memo-sheet { width:210mm; min-height:297mm; padding:25mm 20mm 20mm 30mm; margin:0 auto 12mm; background:#fff; color:#111; font-family:"TH Sarabun New","Sarabun",sans-serif; font-size:16pt; line-height:1.2; box-shadow:0 10px 28px rgba(15,23,42,.14); }
+  .memo-sheet { width:210mm; min-height:297mm; padding:15mm 20mm 20mm 30mm; margin:0 auto 12mm; background:#fff; color:#111; font-family:"TH Sarabun New","Sarabun",sans-serif; font-size:16pt; line-height:1.2; box-shadow:0 10px 28px rgba(15,23,42,.14); }
   .memo-sheet, .memo-sheet * { color:#111; }
   .memo-sheet .memo-head { display:table; width:100%; table-layout:fixed; border-collapse:collapse; }
   .memo-sheet .memo-head td { padding:0; border:0; vertical-align:top; }
@@ -261,6 +262,7 @@ if (($_POST['action'] ?? '') === 'word_document') {
   .memo-sheet .memo-meta-no { display:grid; grid-template-columns:auto minmax(0,1.4fr) auto minmax(0,1fr); gap:0 8pt; align-items:baseline; margin-top:3pt; }
   .memo-sheet .memo-label { font-size:20pt; font-weight:700; line-height:1; white-space:nowrap; }
   .memo-sheet .memo-value { font-size:16pt; line-height:1.2; overflow-wrap:break-word; }
+  .memo-sheet .memo-office-value { font-size:15pt!important; line-height:1.2; letter-spacing:-0.12pt; white-space:nowrap; overflow-wrap:normal; }
   .memo-sheet .memo-section { font-weight:bold; margin-top:12pt; margin-bottom:3pt; text-indent:2.5cm; }
   .memo-sheet .memo-paragraph { margin:0 0 5pt; text-align:justify; text-align-last:left; text-justify:inter-character; text-indent:2.5cm; white-space:pre-line; overflow-wrap:break-word; }
   .memo-sheet .memo-signatures { margin-top:13pt; line-height:1.15; }
@@ -301,8 +303,8 @@ if (($_POST['action'] ?? '') === 'word_document') {
 
         @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Regular.ttf") format("truetype");font-weight:400;font-style:normal;}
         @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Bold.ttf") format("truetype");font-weight:700;font-style:normal;}
-  @page resultMemo {size:A4;margin:30mm 20mm 20mm 30mm;@top-center {content:"- " counter(page,result-memo-thai) " -";font-family:"WorkflowThaiPrint","TH Sarabun New",sans-serif;font-size:16pt;font-weight:400;vertical-align:middle;margin:0;padding:0;}}
-  @page resultMemo:first {margin-top:25mm;@top-center{content:none;}}
+  @page resultMemo {size:A4;margin:15mm 20mm 20mm 30mm;@top-center {content:"- " counter(page,result-memo-thai) " -";font-family:"WorkflowThaiPrint","TH Sarabun New",sans-serif;font-size:16pt;font-weight:400;vertical-align:middle;margin:0;padding:0;}}
+  @page resultMemo:first {margin-top:15mm;@top-center{content:none;}}
   @media print {
     html,body.result-memo-app { margin:0!important; padding:0!important; background:#fff!important; width:auto!important; min-width:0!important; }
     .no-print, .result-top, .result-editor-column, .result-preview-heading { display:none!important; }

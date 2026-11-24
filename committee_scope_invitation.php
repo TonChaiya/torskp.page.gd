@@ -174,7 +174,7 @@ function committeeScopeWordHtml(array $data): string
         <meta charset="utf-8">
         <title>บันทึกข้อความ แจ้งคำสั่งและเชิญประชุม</title>
         <style>
-            @page { size: A4; margin: 25mm 20mm 20mm 30mm; }
+            @page { size: A4; margin: 15mm 20mm 20mm 30mm; }
             body { margin: 0; color: #111; font-family: "TH Sarabun New", "Sarabun", sans-serif; font-size: 16pt; line-height: 1; }
             .memo-page { width: 160mm; page-break-after: auto !important; }
             .word-page-break { page-break-before: always; mso-special-character: line-break; font-size: 1pt; line-height: 1pt; height: 1pt; }
@@ -387,22 +387,21 @@ if (($_POST['action'] ?? '') === 'save_document') {
     <title>บันทึกข้อความ แจ้งคำสั่งและเชิญประชุม</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @counter-style invitation-thai-page {system:numeric;symbols:"๐" "๑" "๒" "๓" "๔" "๕" "๖" "๗" "๘" "๙";suffix:"";}
 
         @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Regular.ttf") format("truetype");font-weight:400;font-style:normal;}
         @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Bold.ttf") format("truetype");font-weight:700;font-style:normal;}
         @page invitationMemo {
-            size:A4; margin:30mm 20mm 20mm 30mm;
-            @top-center {content:"- " counter(page, invitation-thai-page) " -";font-family:"WorkflowThaiPrint","TH Sarabun New",sans-serif;font-size:16pt;font-weight:400;vertical-align:middle;margin:0;padding:0;}
+            size:A4; margin:15mm 20mm 20mm 30mm;
+            @top-center {content:none;}
         }
-        @page invitationMemo:first {margin-top:25mm;@top-center {content:none;}}
+        @page invitationMemo:first {margin-top:15mm;@top-center {content:none;}}
         .memo-page {
             width: 210mm;
             height: 297mm;
             margin: 0 auto;
             background: #fff;
             color: #111;
-            padding: 25mm 20mm 20mm 30mm;
+            padding: 15mm 20mm 20mm 30mm;
             box-sizing: border-box;
             font-family: "TH Sarabun New", "Sarabun", sans-serif;
             font-size: 16pt;
