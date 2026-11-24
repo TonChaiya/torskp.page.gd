@@ -6,6 +6,73 @@ require_once __DIR__ . '/core/word_export_lib.php';
 require_once __DIR__ . '/core/auth.php';
 requireLogin();
 
+// Display-only Thai digits for exported DOCX (including fixed text inside the existing Word templates).
+// XML structure, document IDs, field instructions, dates and numeric database values remain unchanged.
+function thaiDocxVisibleDigits(string $text): string
+{
+    return preg_replace_callback('/&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);|[0-9]+/i', static function (array $part): string {
+        if ($part[0][0] === '&') return $part[0];
+        return strtr($part[0], [
+            '0'=>'๐', '1'=>'๑', '2'=>'๒', '3'=>'๓', '4'=>'๔',
+            '5'=>'๕', '6'=>'๖', '7'=>'๗', '8'=>'๘', '9'=>'๙',
+        ]);
+    }, $text) ?? $text;
+}
+function thaiDocxVisibleHtml(string $html): string
+{
+    // Leave tags, CSS, JavaScript, attributes and HTML entities untouched.
+    return preg_replace_callback(
+        '~<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>|<!--.*?-->|<[^>]+>|[^<]+~is',
+        static fn(array $part): string => str_starts_with($part[0], '<') ? $part[0] : thaiDocxVisibleDigits($part[0]),
+        $html
+    ) ?? $html;
+}
+function thaiDocxDigitResponse(string $bytes): string
+{
+    if (!str_starts_with($bytes, "PK\x03\x04") || !class_exists(ZipArchive::class)) return $bytes;
+    $temporary = tempnam(sys_get_temp_dir(), 'thai_docx_digits_');
+    if ($temporary === false) return $bytes;
+    try {
+        if (file_put_contents($temporary, $bytes) === false) return $bytes;
+        $zip = new ZipArchive();
+        if ($zip->open($temporary) !== true) return $bytes;
+        try {
+            for ($i = 0, $count = $zip->numFiles; $i < $count; $i++) {
+                $name = $zip->getNameIndex($i);
+                if ($name === false) continue;
+                if (preg_match('~^word/(?:document|header[0-9]+|footer[0-9]+|footnotes|endnotes|comments[0-9]*)\.xml$~i', $name)) {
+                    $xml = $zip->getFromIndex($i);
+                    if (!is_string($xml)) continue;
+                    $converted = preg_replace_callback(
+                        '~(<w:(t|delText)\b[^>]*>)(.*?)(</w:\\2>)~su',
+                        static fn(array $match): string => $match[1] . thaiDocxVisibleDigits($match[3]) . $match[4],
+                        $xml
+                    ) ?? $xml;
+                    if ($converted !== $xml) $zip->addFromString($name, $converted);
+                } elseif (preg_match('~^word/afchunk\.html$~i', $name)) {
+                    $html = $zip->getFromIndex($i);
+                    if (!is_string($html)) continue;
+                    $converted = thaiDocxVisibleHtml($html);
+                    if ($converted !== $html) $zip->addFromString($name, $converted);
+                }
+            }
+        } finally {
+            $zip->close();
+        }
+        $changed = file_get_contents($temporary);
+        if (!is_string($changed) || !str_starts_with($changed, "PK\x03\x04")) return $bytes;
+        header_remove('Content-Length'); // Modified DOCX byte length differs from the original stream.
+        return $changed;
+    } catch (Throwable $error) {
+        error_log('Thai DOCX digit display conversion failed: ' . $error->getMessage());
+        return $bytes;
+    } finally {
+        @unlink($temporary);
+    }
+}
+if (($_POST['action'] ?? '') === 'word') ob_start('thaiDocxDigitResponse');
+
+
 function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
 function money(float $value): string { return number_format($value, 2); }
 function quantityNumber(float|int|string $value): string
@@ -930,12 +997,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$error) {
         } else {
             $committee = [post('committee_1'), post('committee_2'), post('committee_3')];
             $priceSource = post('price_source');
-            outputBrowserPrint(reportHtml([
+            outputBrowserPrint(thaiDocxVisibleHtml(reportHtml([
                 'committee' => $committee,
                 'items' => $items,
                 'price_source' => $priceSource,
                 'fiscal_year' => torFiscalYearForCase($data['procurement_cases'], (int) post('case_id')),
-            ]));
+            ])));
         }
     }
 
@@ -1485,9 +1552,9 @@ function searchMedicines(row, query) {
     const hidden = row.querySelector('.medicine-select');
     const input = row.querySelector('.medicine-search');
     const results = row.querySelector('.medicine-results');
-    const term = query.trim().toLocaleLowerCase('th-TH');
+    const term = arabicDigits(query.trim()).toLocaleLowerCase('th-TH');
 
-    if (medicines[hidden.value]?.name !== input.value) {
+    if (arabicDigits(medicines[hidden.value]?.name || '') !== arabicDigits(input.value)) {
         hidden.value = '';
     }
     if (term.length < 3) {
@@ -1498,7 +1565,7 @@ function searchMedicines(row, query) {
 
     const matches = medicineList
         .filter((medicine) => {
-            const haystack = `${medicine.name || ''} ${medicine.specification || ''} ${medicine.unit || ''}`.toLocaleLowerCase('th-TH');
+            const haystack = arabicDigits(`${medicine.name || ''} ${medicine.specification || ''} ${medicine.unit || ''}`).toLocaleLowerCase('th-TH');
             return haystack.includes(term);
         })
         .slice(0, 12);
@@ -1858,7 +1925,7 @@ async function searchPriceReferences(query) {
     const status = document.getElementById('price_reference_status');
     status.textContent = 'กำลังค้นหา...';
     results.innerHTML = '';
-    const response = await fetch(`tor_company_purchase.php?action=search_price_reference&q=${encodeURIComponent(query)}&t=${Date.now()}`);
+    const response = await fetch(`tor_company_purchase.php?action=search_price_reference&q=${encodeURIComponent(arabicDigits(query))}&t=${Date.now()}`);
     const data = await response.json();
     if (!data.ok) {
         status.textContent = data.error || 'ค้นหาไม่สำเร็จ';
@@ -1898,5 +1965,83 @@ document.getElementById('price_reference_results')?.addEventListener('click', (e
 });
 updatePage();
 </script>
+
+<script>
+/* Display-only Thai digits. Field names, IDs, URLs and stored numeric values are not changed. */
+(() => {
+    const thai = (value) => String(value).replace(/[0-9]/g, digit => '๐๑๒๓๔๕๖๗๘๙'[Number(digit)]);
+    document.title = thai(document.title);
+    const blocked = 'script, style, noscript, template';
+    const isField = (node) => node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement;
+    function visibleField(field) {
+        if (!isField(field)) return false;
+        if (field instanceof HTMLInputElement) {
+            if (['hidden', 'date', 'datetime-local', 'time', 'month', 'week', 'checkbox', 'radio', 'file', 'submit', 'button', 'reset', 'color', 'range', 'password', 'email', 'url', 'tel'].includes(field.type)) return false;
+            if (field.type === 'number') {
+                // Native number inputs reject Thai numerals; retain the same field name and
+                // decimal keyboard while letting the existing Thai-aware calculations parse values.
+                field.type = 'text';
+                field.inputMode = 'decimal';
+                field.pattern = '[0-9๐-๙]+(?:[.,][0-9๐-๙]+)*';
+            }
+        }
+        return true;
+    }
+    function changeField(field) {
+        if (!visibleField(field)) return;
+        const oldValue = field.value;
+        const newValue = thai(oldValue);
+        if (oldValue === newValue) return;
+        let start = null, end = null;
+        try { start = field.selectionStart; end = field.selectionEnd; } catch (_) {}
+        field.value = newValue;
+        if (start !== null && end !== null && document.activeElement === field) {
+            try { field.setSelectionRange(start, end); } catch (_) {}
+        }
+    }
+    function convertText(node) {
+        if (node.nodeType !== Node.TEXT_NODE) return;
+        const parent = node.parentElement;
+        if (!parent || parent.closest(blocked + ', textarea')) return;
+        const updated = thai(node.nodeValue || '');
+        if (updated !== node.nodeValue) node.nodeValue = updated;
+    }
+    function visit(node, includeFields = true) {
+        if (node.nodeType === Node.TEXT_NODE) { convertText(node); return; }
+        if (node.nodeType !== Node.ELEMENT_NODE || node.closest(blocked)) return;
+        if (includeFields && isField(node)) changeField(node);
+        if (node.hasAttribute('placeholder')) node.setAttribute('placeholder', thai(node.getAttribute('placeholder')));
+        if (node.hasAttribute('title')) node.setAttribute('title', thai(node.getAttribute('title')));
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) convertText(walker.currentNode);
+        if (includeFields) node.querySelectorAll('input, textarea').forEach(changeField);
+        node.querySelectorAll('[placeholder], [title]').forEach(el => {
+            if (el.hasAttribute('placeholder')) {
+                const before = el.getAttribute('placeholder'); const after = thai(before);
+                if (after !== before) el.setAttribute('placeholder', after);
+            }
+            if (el.hasAttribute('title')) {
+                const before = el.getAttribute('title'); const after = thai(before);
+                if (after !== before) el.setAttribute('title', after);
+            }
+        });
+    }
+    visit(document.body);
+    const observer = new MutationObserver(records => {
+        for (const mutation of records) {
+            if (mutation.type === 'characterData') convertText(mutation.target);
+            else for (const node of mutation.addedNodes) visit(node);
+        }
+    });
+    observer.observe(document.body, { subtree: true, characterData: true, childList: true });
+    document.addEventListener('input', event => changeField(event.target), true);
+    document.addEventListener('change', event => changeField(event.target), true);
+    // Covers values populated by existing click handlers (medicine choices and saved drafts).
+    document.addEventListener('click', () => requestAnimationFrame(() => {
+        document.querySelectorAll('input, textarea').forEach(changeField);
+    }), true);
+})();
+</script>
+
 </body>
 </html>

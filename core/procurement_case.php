@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/scope_price_approval_store.php';
 
 function ensureProcurementTables(): void
 {
@@ -69,6 +70,7 @@ function procurementCaseCompletion(int $caseId): array
     return [
         'principle_approval' => isset($documents['principle_approval']),
         'committee_scope_invitation' => isset($documents['committee_scope_invitation']),
+        'scope_price_approval_memo' => scopePriceApprovalExists($caseId),
         'tor_company_purchase' => isset($documents['tor_company_purchase']),
         'committee_scope_result_memo' => isset($documents['committee_scope_result_memo']),
         'meeting_report' => isset($documents['meeting_report']),
@@ -164,6 +166,7 @@ function resetProcurementWorkflowData(): void
     db()->exec('DELETE FROM procurement_documents');
     db()->exec('DELETE FROM procurement_cases');
     db()->exec('DELETE FROM tor_histories');
+    scopePriceApprovalClearAll();
 }
 
 function deleteProcurementCase(int $caseId): void
@@ -197,6 +200,8 @@ function deleteProcurementDocuments(int $caseId, array $documentTypes): void
     ensureProcurementTables();
     if ($caseId <= 0) return;
 
+    $deleteScopePriceApproval = in_array('scope_price_approval_memo', $documentTypes, true);
+
     $allowedTypes = [
         'principle_approval',
         'committee_scope_invitation',
@@ -205,14 +210,19 @@ function deleteProcurementDocuments(int $caseId, array $documentTypes): void
         'meeting_report',
     ];
     $documentTypes = array_values(array_intersect($allowedTypes, array_map('strval', $documentTypes)));
-    if (!$documentTypes) return;
+    if (!$documentTypes && !$deleteScopePriceApproval) return;
 
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $placeholders = implode(',', array_fill(0, count($documentTypes), '?'));
-        $stmt = $pdo->prepare("DELETE FROM procurement_documents WHERE case_id = ? AND document_type IN ($placeholders)");
-        $stmt->execute([$caseId, ...$documentTypes]);
+        if ($deleteScopePriceApproval) {
+            scopePriceApprovalDelete($caseId);
+        }
+        if ($documentTypes) {
+            $placeholders = implode(',', array_fill(0, count($documentTypes), '?'));
+            $stmt = $pdo->prepare("DELETE FROM procurement_documents WHERE case_id = ? AND document_type IN ($placeholders)");
+            $stmt->execute([$caseId, ...$documentTypes]);
+        }
 
         if (in_array('tor_company_purchase', $documentTypes, true)) {
             $stmt = $pdo->prepare('DELETE FROM tor_histories WHERE case_id = ?');

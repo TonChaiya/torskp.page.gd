@@ -477,5 +477,83 @@ if (($_POST['action']??'')==='save_document') {
   updatePreview();
 })();
 </script>
+
+<script>
+/* Display-only Thai digits. Field names, IDs, URLs and stored numeric values are not changed. */
+(() => {
+    const thai = (value) => String(value).replace(/[0-9]/g, digit => '๐๑๒๓๔๕๖๗๘๙'[Number(digit)]);
+    document.title = thai(document.title);
+    const blocked = 'script, style, noscript, template';
+    const isField = (node) => node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement;
+    function visibleField(field) {
+        if (!isField(field)) return false;
+        if (field instanceof HTMLInputElement) {
+            if (['hidden', 'date', 'datetime-local', 'time', 'month', 'week', 'checkbox', 'radio', 'file', 'submit', 'button', 'reset', 'color', 'range', 'password', 'email', 'url', 'tel'].includes(field.type)) return false;
+            if (field.type === 'number') {
+                // Native number inputs reject Thai numerals; retain the same field name and
+                // decimal keyboard while letting the existing Thai-aware calculations parse values.
+                field.type = 'text';
+                field.inputMode = 'decimal';
+                field.pattern = '[0-9๐-๙]+(?:[.,][0-9๐-๙]+)*';
+            }
+        }
+        return true;
+    }
+    function changeField(field) {
+        if (!visibleField(field)) return;
+        const oldValue = field.value;
+        const newValue = thai(oldValue);
+        if (oldValue === newValue) return;
+        let start = null, end = null;
+        try { start = field.selectionStart; end = field.selectionEnd; } catch (_) {}
+        field.value = newValue;
+        if (start !== null && end !== null && document.activeElement === field) {
+            try { field.setSelectionRange(start, end); } catch (_) {}
+        }
+    }
+    function convertText(node) {
+        if (node.nodeType !== Node.TEXT_NODE) return;
+        const parent = node.parentElement;
+        if (!parent || parent.closest(blocked + ', textarea')) return;
+        const updated = thai(node.nodeValue || '');
+        if (updated !== node.nodeValue) node.nodeValue = updated;
+    }
+    function visit(node, includeFields = true) {
+        if (node.nodeType === Node.TEXT_NODE) { convertText(node); return; }
+        if (node.nodeType !== Node.ELEMENT_NODE || node.closest(blocked)) return;
+        if (includeFields && isField(node)) changeField(node);
+        if (node.hasAttribute('placeholder')) node.setAttribute('placeholder', thai(node.getAttribute('placeholder')));
+        if (node.hasAttribute('title')) node.setAttribute('title', thai(node.getAttribute('title')));
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) convertText(walker.currentNode);
+        if (includeFields) node.querySelectorAll('input, textarea').forEach(changeField);
+        node.querySelectorAll('[placeholder], [title]').forEach(el => {
+            if (el.hasAttribute('placeholder')) {
+                const before = el.getAttribute('placeholder'); const after = thai(before);
+                if (after !== before) el.setAttribute('placeholder', after);
+            }
+            if (el.hasAttribute('title')) {
+                const before = el.getAttribute('title'); const after = thai(before);
+                if (after !== before) el.setAttribute('title', after);
+            }
+        });
+    }
+    visit(document.body);
+    const observer = new MutationObserver(records => {
+        for (const mutation of records) {
+            if (mutation.type === 'characterData') convertText(mutation.target);
+            else for (const node of mutation.addedNodes) visit(node);
+        }
+    });
+    observer.observe(document.body, { subtree: true, characterData: true, childList: true });
+    document.addEventListener('input', event => changeField(event.target), true);
+    document.addEventListener('change', event => changeField(event.target), true);
+    // Covers values populated by existing click handlers (medicine choices and saved drafts).
+    document.addEventListener('click', () => requestAnimationFrame(() => {
+        document.querySelectorAll('input, textarea').forEach(changeField);
+    }), true);
+})();
+</script>
+
 </body>
 </html>
