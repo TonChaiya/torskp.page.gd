@@ -304,201 +304,63 @@ function itemSnapshot(array $items): array
 
 function renderMeetingWordContent(string $content, array $items): string
 {
-    $contentText = str_replace(["\r\n", "\r"], "\n", trim($content));
+    // Keep the same text and line breaks as the on-screen preview.
+    $contentText = displayText($content);
     if (!str_contains($contentText, '[medicine_items]')) {
-        return renderMeetingWordParagraphs($contentText);
+        return '<div class="content">' . compactBreaks(nl2br(h($contentText))) . '</div>';
     }
-
     [$beforeItems, $afterItems] = array_pad(explode('[medicine_items]', $contentText, 2), 2, '');
     ob_start();
     ?>
-    <div class="content"><?= renderMeetingWordParagraphs($beforeItems) ?></div>
-    <table class="medicine-lines">
-        <?php foreach ($items as $i => $item): ?>
+    <div class="content"><?= compactBreaks(nl2br(h(displayText($beforeItems)))) ?></div>
+    <div class="medicine-lines">
+        <table>
+            <?php foreach ($items as $i => $item): ?>
             <tr>
-                <td><?= thaiDigits($i + 1) ?>. <?= h((string) ($item['name'] ?? '')) ?></td>
-                <td class="nowrap"><?= h(meetingItemQuantityLine($item)) ?></td>
+                <td style="width:55%"><?= thaiDigits($i + 1) ?>. <?= h((string) ($item['name'] ?? '')) ?></td>
+                <td style="width:45%"><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></td>
             </tr>
-        <?php endforeach; ?>
-    </table>
-    <div class="content"><?= renderMeetingWordParagraphs($afterItems) ?></div>
+            <?php endforeach; ?>
+        </table>
+    </div>
+    <div class="content"><?= compactBreaks(nl2br(h(displayText($afterItems)))) ?></div>
     <?php
     return (string) ob_get_clean();
 }
 
-function meetingReportWordHtml(array $data): string
+/**
+ * One document body for preview and Word.  Word gets table-based equivalents
+ * only where the preview uses CSS grid, which Microsoft Word cannot import.
+ * Document sections, field values, annexes and text are shared.
+ */
+function meetingReportDocumentPages(array $data, bool $forWord = false): string
 {
-    $hasPackageItems = count(array_filter($data['items'], 'meetingItemHasPackage')) > 0;
+    extract($data, EXTR_SKIP);
     ob_start();
     ?>
-    <!doctype html>
-    <html lang="th">
-    <head>
-        <meta charset="utf-8">
-        <title>รายงานการประชุม</title>
-        <style>
-            @page { size: A4; margin: 25mm 20mm 20mm 20mm; }
-            body { margin: 0; color: #111; font-family: "TH Sarabun New", "Sarabun", sans-serif; font-size: 16pt; line-height: 1; }
-            .report-page { width: 170mm; page-break-after: auto; }
-            .word-page-break { page-break-before: always; font-size: 1pt; line-height: 1pt; }
-            table { width: 100%; border-collapse: collapse; border-spacing: 0; mso-cellspacing: 0in; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-            td, th { font-size: 16pt; line-height: 1; vertical-align: top; }
-            .doc-title { text-align: center; font-weight: 700; line-height: 1; }
-            .section-label { margin-top: 10pt; font-weight: 700; }
-            .attendee-table td { border: 0; padding: 0 3pt 0 0; }
-            .speech-table { table-layout: fixed; margin-top: 0; page-break-inside: auto; }
-            .speech-table td { border: 0; padding: 0; }
-            .speech-table tr { page-break-inside: avoid; }
-            .speech-left { width: 135pt; mso-width-source: userset; padding-right: 9pt !important; font-weight: 700; }
-            .speaker-line { display: block; margin: 0; padding: 0; line-height: 1; white-space: nowrap; }
-            .speech-body { width: 347pt; mso-width-source: userset; text-align: left; text-justify: auto; text-align-last: left; }
-            .meeting-content-paragraph { margin: 0; padding: 0; line-height: 1; text-align: justify; text-justify: inter-cluster; -ms-text-justify: distribute; text-align-last: left; }
-            .agenda-heading td { padding-top: 7pt; font-weight: 700; }
-            .first-agenda td { padding-top: 3pt; }
-            .medicine-lines { width: 100%; table-layout: fixed; margin: 2pt 0; }
-            .medicine-lines td { border: 0; padding: 0 5pt 0 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-            .medicine-lines td:first-child { width: 52%; }
-            .medicine-lines td:last-child { width: 48%; }
-            .nowrap { white-space: normal; }
-            .medicine-table { margin-top: 10pt; border-collapse: collapse; page-break-inside: avoid; }
-            .attendance-table {
-                margin-top: 10pt;
-                table-layout: fixed;
-                border-collapse: collapse;
-                border-spacing: 0;
-                mso-cellspacing: 0in;
-                border: 0;
-                mso-border-alt: none;
-                font-family: "TH Sarabun New", "Sarabun", sans-serif;
-                font-size: 16pt;
-                line-height: 1;
-            }
-            .medicine-table th, .medicine-table td,
-            .attendance-table th, .attendance-table td { padding: 3pt 5pt; }
-            .medicine-table th, .medicine-table td { border: 0.5pt solid #000; mso-border-alt: solid #000 0.5pt; }
-            .attendance-table th, .attendance-table td {
-                border: 0.5pt solid #000;
-                mso-border-alt: solid #000 0.5pt;
-                font-family: "TH Sarabun New", "Sarabun", sans-serif !important;
-                font-size: 16pt !important;
-                font-weight: 400;
-                line-height: 1 !important;
-                page-break-inside: avoid;
-            }
-            .medicine-table th, .attendance-table th { text-align: center; font-weight: 700; }
-            .medicine-table thead { display: table-header-group; }
-            .medicine-table thead tr { page-break-after: avoid; }
-            .medicine-table thead th { page-break-after: avoid; }
-            .center { text-align: center; }
-            .right { text-align: right; }
-            .signature-table { margin-top: 28pt; text-align: center; }
-            .signature-table td { border: 0; text-align: center; padding-top: 8pt; }
-        </style>
-    </head>
-    <body>
-        <div class="report-page">
+        <article class="report-page attendance-page">
+            <?php if ($hasSelectedHistory): ?>
             <div class="doc-title">
-                <div><?= h($data['meeting_title']) ?></div>
-                <div><?= h($data['purpose_line']) ?></div>
-                <div><?= h($data['fiscal_line']) ?></div>
-                <div>วันที่ <?= h($data['meeting_date']) ?> เวลา <?= h($data['meeting_time']) ?></div>
-                <div>ณ&nbsp;&nbsp;<?= h($data['meeting_place']) ?></div>
+                <div>รายงานการประชุม</div>
+                <div>คณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง</div>
+                <div>เพื่อจัดหาการจัดซื้อยา จำนวน <?= h($itemCountText) ?> รายการ</div>
+                <div>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
+                <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
+                <div>ณ&nbsp;&nbsp;<?= h($meetingPlace) ?></div>
             </div>
 
-            <div class="section-label">ผู้เข้าประชุม</div>
-            <table class="attendee-table">
-                <?php foreach ($data['committee'] as $i => $person): ?>
-                    <tr>
-                        <td style="width:28pt;"><?= thaiDigits($i + 1) ?>.</td>
-                        <td style="width:180pt;"><?= h($person['name']) ?></td>
-                        <td style="width:145pt;"><?= h($person['position']) ?></td>
-                        <td><?= h($person['role']) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </table>
-            <div class="section-label">ผู้ไม่เข้าประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-weight:400;"><?= h($data['absent_text']) ?></span></div>
-            <div class="section-label">เปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-weight:400;">เวลา <?= h($data['open_time']) ?></span></div>
-
-            <?php $shownAgendaIndex = 0; ?>
-            <?php foreach ($data['agenda_order'] as $agendaName): ?>
-                <?php if (empty($data['speeches_by_agenda'][$agendaName])) continue; ?>
-                <table class="speech-table speech-group <?= $shownAgendaIndex === 0 ? 'first-agenda' : '' ?>" width="643" cellspacing="0" cellpadding="0" style="width:482pt;table-layout:fixed;mso-table-layout-alt:fixed;border-collapse:collapse;border-spacing:0;mso-cellspacing:0in;">
-                    <colgroup><col width="180" style="width:135pt;mso-width-source:userset;"><col width="463" style="width:347pt;mso-width-source:userset;"></colgroup>
-                    <tr class="agenda-heading">
-                        <td class="speech-left" width="180" style="width:135pt;mso-width-source:userset;padding-right:9pt;"><?= h($agendaName) ?></td>
-                        <td class="speech-body" width="463" style="width:347pt;mso-width-source:userset;font-weight:700;"><?= h($data['agenda_titles'][$agendaName] ?? '') ?></td>
-                    </tr>
-                    <?php foreach ($data['speeches_by_agenda'][$agendaName] as $speech): ?>
-                        <tr>
-                            <td class="speech-left" width="180" style="width:135pt;mso-width-source:userset;padding-right:9pt;"><?= renderMeetingWordSpeaker((string) ($speech['speaker'] ?? '')) ?></td>
-                            <td class="speech-body" width="463" style="width:347pt;mso-width-source:userset;"><?= renderMeetingWordContent((string) ($speech['content'] ?? ''), $data['items']) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-                <?php $shownAgendaIndex++; ?>
-                <?php if ($agendaName === 'ระเบียบวาระที่ ๓' && $data['items']): ?>
-                    <div class="word-page-break">&nbsp;</div>
-                    <table class="medicine-table" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border-spacing:0;mso-cellspacing:0in;">
-                        <thead>
-                        <tr>
-                            <th style="width:8%;"><?= $hasPackageItems ? 'ที่' : 'ลำดับ' ?></th>
-                            <th>รายการยา</th>
-                            <th style="width:14%;">ราคากลาง</th>
-                            <th style="width:14%;">ราคาเสนอ</th>
-                            <th style="width:<?= $hasPackageItems ? '11%' : '14%' ?>;">จำนวน</th>
-                            <th style="width:<?= $hasPackageItems ? '20%' : '12%' ?>;"><?= $hasPackageItems ? 'ขนาดบรรจุ/หน่วยนับ' : 'หน่วยนับ' ?></th>
-                            <th style="width:16%;">มูลค่ารวม</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($data['items'] as $i => $item): ?>
-                            <tr>
-                                <td class="center"><?= thaiDigits($i + 1) ?></td>
-                                <td><?= h((string) ($item['name'] ?? '')) ?></td>
-                                <td class="right"><?= money((float) ($item['reference_price'] ?? 0)) ?></td>
-                                <td class="right"><?= money((float) ($item['offer_price'] ?? 0)) ?></td>
-                                <td class="right"><?= quantityText(meetingItemQuantity($item)) ?></td>
-                                <td class="center"><?= h(meetingItemUnitText($item)) ?></td>
-                                <td class="right"><?= money(meetingItemOfferTotal($item)) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                        <tr>
-                            <td colspan="6" class="center">รวม</td>
-                            <td class="right"><?= money((float) $data['offer_total']) ?></td>
-                        </tr>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
-            <?php endforeach; ?>
-
-            <div class="section-label">ปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-weight:400;"><?= h($data['close_time']) ?></span></div>
-            <table class="signature-table" cellspacing="0" cellpadding="0">
-                <tr><td colspan="2">(ลงชื่อ)........................................ประธานกรรมการ<br><?= h($data['committee'][0]['name']) ?><br><?= h($data['committee'][0]['position']) ?></td></tr>
+            <table class="attendance-table">
+                <thead>
                 <tr>
-                    <td>(ลงชื่อ)........................................กรรมการ<br><?= h($data['committee'][1]['name']) ?><br><?= h($data['committee'][1]['position']) ?></td>
-                    <td>(ลงชื่อ)........................................กรรมการ<br><?= h($data['committee'][2]['name']) ?><br><?= h($data['committee'][2]['position']) ?></td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="word-page-break">&nbsp;</div>
-        <div class="report-page">
-            <div class="doc-title">
-                <div><?= h($data['meeting_title']) ?></div>
-                <div><?= h($data['purpose_line']) ?></div>
-                <div><?= h($data['fiscal_line']) ?></div>
-                <div>วันที่ <?= h($data['meeting_date']) ?> เวลา <?= h($data['meeting_time']) ?></div>
-                <div>ณ&nbsp;&nbsp;<?= h($data['meeting_place']) ?></div>
-            </div>
-            <table class="attendance-table" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border-spacing:0;mso-cellspacing:0in;">
-                <tr>
-                    <th style="width:8%;">ลำดับ</th>
+                    <th style="width: 8%">ลำดับ</th>
                     <th>รายชื่อคณะกรรมการ<br>ผู้เข้าร่วมประชุม</th>
-                    <th style="width:20%;">ตำแหน่ง</th>
-                    <th style="width:20%;">ลายมือชื่อ</th>
-                    <th style="width:20%;">หมายเหตุ</th>
+                    <th style="width: 20%">ตำแหน่ง</th>
+                    <th style="width: 20%">ลายมือชื่อ</th>
+                    <th style="width: 20%">หมายเหตุ</th>
                 </tr>
-                <?php foreach ($data['committee'] as $i => $person): ?>
+                </thead>
+                <tbody>
+                <?php foreach ($committee as $i => $person): ?>
                     <tr>
                         <td class="center"><?= thaiDigits($i + 1) ?></td>
                         <td><?= h($person['name']) ?></td>
@@ -507,12 +369,299 @@ function meetingReportWordHtml(array $data): string
                         <td></td>
                     </tr>
                 <?php endforeach; ?>
+                </tbody>
             </table>
-        </div>
-    </body>
-    </html>
+            <?php endif; ?>
+        </article>
+
+        <?php if ($forWord && $hasSelectedHistory): ?>
+        <!-- Word page 2+: Minutes, always on new page after attendance -->
+        <p class="word-part-page-break" style="page-break-before:always;break-before:page;page-break-after:auto;font-size:1pt;line-height:1pt;height:1pt;margin:0;padding:0">&nbsp;</p>
+        <?php endif; ?>
+        <article class="report-page report-main">
+            <?php if ($hasSelectedHistory): ?>
+            <div class="doc-title">
+                <div>รายงานการประชุม<?= h(preg_replace('/^รายงานการประชุม/u', '', $meetingTitle) ?? $meetingTitle) ?></div>
+                <div><?= h($purposeLine) ?></div>
+                <div><?= h($fiscalLine) ?></div>
+                <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
+                <div>ณ&nbsp;&nbsp;<?= h($meetingPlace) ?></div>
+            </div>
+
+            <div class="mt-8 font-bold">ผู้เข้าประชุม</div>
+            <?php if ($forWord): ?>
+            <table class="word-committee-list">
+                <?php foreach ($committee as $i => $person): ?>
+                <tr><td style="width:8%"> <?= thaiDigits($i + 1) ?>.</td><td style="width:38%"> <?= h($person['name']) ?></td><td style="width:30%"> <?= h($person['position']) ?></td><td style="width:24%"> <?= h($person['role']) ?></td></tr>
+                <?php endforeach; ?>
+            </table>
+            <?php else: ?>
+            <?php foreach ($committee as $i => $person): ?>
+                <div class="attendee-grid thai-justify">
+                    <div><?= thaiDigits($i + 1) ?>.</div>
+                    <div><?= h($person['name']) ?></div>
+                    <div><?= h($person['position']) ?></div>
+                    <div><?= h($person['role']) ?></div>
+                </div>
+            <?php endforeach; ?>
+            <?php endif; ?>
+            <div class="mt-2 font-bold">ผู้ไม่เข้าประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal"><?= h($absentText) ?></span></div>
+            <div class="mt-2 font-bold">เปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal">เวลา <?= h($openTime) ?></span></div>
+
+            <?php if ($forWord): ?>
+            <!-- One fixed-width table for every agenda row: prevents Word from autofitting each row separately. -->
+            <table class="word-agenda-table" width="100%" cellspacing="0" cellpadding="0" style="width:170mm;table-layout:fixed;border-collapse:collapse">
+                <colgroup>
+                    <col width="22%" style="width:37.4mm">
+                    <col width="78%" style="width:132.6mm">
+                </colgroup>
+            <?php endif; ?>
+            <?php $shownAgendaIndex = 0; ?>
+            <?php foreach ($agendaOrder as $agendaName): ?>
+                <?php if (empty($speechesByAgenda[$agendaName])) continue; ?>
+                <?php if ($forWord): ?>
+                <tr class="word-agenda-heading">
+                    <td class="word-speech-label" width="22%" style="width:37.4mm"><strong><?= h($agendaName) ?></strong></td>
+                    <td class="word-speech-content" width="78%" align="left" style="width:132.6mm;text-align:left"><strong><?= h($agendaTitles[$agendaName] ?? '') ?></strong></td>
+                </tr>
+                <?php else: ?>
+                <div class="speech-row agenda-heading <?= $shownAgendaIndex === 0 ? 'first-agenda' : '' ?>">
+                    <div class="topic"><?= h($agendaName) ?></div>
+                    <div class="topic"><?= h($agendaTitles[$agendaName] ?? '') ?></div>
+                </div>
+                <?php endif; ?>
+                <?php $shownAgendaIndex++; ?>
+                <?php foreach ($speechesByAgenda[$agendaName] as $speechIndex => $speech): ?>
+                    <?php if ($forWord): ?>
+                    <tr class="word-agenda-entry">
+                        <td class="word-speech-label" width="22%" style="width:37.4mm"><?= renderMeetingWordSpeaker((string) ($speech['speaker'] ?? '')) ?></td>
+                        <td class="word-speech-content" width="78%" align="left" style="width:132.6mm;text-align:left;text-justify:auto;letter-spacing:normal;word-spacing:normal"><?= renderMeetingWordContent((string) ($speech['content'] ?? ''), $items) ?></td>
+                    </tr>
+                    <?php else: ?>
+                    <div class="speech-row thai-justify">
+                        <div class="speech-left">
+                            <?php $speakerLines = array_values(array_filter(array_map('trim', explode("\n", displayText((string) ($speech['speaker'] ?? '')))), fn($line) => $line !== '')); ?>
+                            <?php if ($speakerLines): ?>
+                                <div class="speaker">
+                                    <?php foreach ($speakerLines as $line): ?>
+                                        <span class="speaker-line"><?= h($line) ?></span>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="speech-body">
+                            <?php $contentText = displayText((string) ($speech['content'] ?? '')); ?>
+                            <?php if (str_contains($contentText, '[medicine_items]')): ?>
+                                <?php [$beforeItems, $afterItems] = array_pad(explode('[medicine_items]', $contentText, 2), 2, ''); ?>
+                                <div class="content"><?= compactBreaks(nl2br(h(displayText($beforeItems)))) ?></div>
+                                <div class="medicine-lines">
+                                    <?php foreach ($items as $i => $item): ?>
+                                        <div class="medicine-line">
+                                            <div><?= thaiDigits($i + 1) ?>. <?= h((string) ($item['name'] ?? '')) ?></div>
+                                            <div class="qty"><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="content"><?= compactBreaks(nl2br(h(displayText($afterItems)))) ?></div>
+                            <?php else: ?>
+                                <div class="content"><?= compactBreaks(nl2br(h($contentText))) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+
+            <?php endforeach; ?>
+            <?php if ($forWord): ?></table><?php endif; ?>
+
+            <div class="mt-2 font-bold">ปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal"><?= h($closeTime) ?></span></div>
+
+            <?php if ($forWord): ?>
+            <table class="word-signature-table">
+                <tr><td colspan="2">(ลงชื่อ)........................................ประธานกรรมการ<br><?= h($committee[0]['name']) ?><br><?= h($committee[0]['position']) ?></td></tr>
+                <tr><td>(ลงชื่อ)........................................กรรมการ<br><?= h($committee[1]['name']) ?><br><?= h($committee[1]['position']) ?></td>
+                <td>(ลงชื่อ)........................................กรรมการ<br><?= h($committee[2]['name']) ?><br><?= h($committee[2]['position']) ?></td></tr>
+            </table>
+            <?php else: ?>
+            <div class="signature-grid">
+                <div class="chair">
+                    (ลงชื่อ)........................................ประธานกรรมการ<br>
+                    <?= h($committee[0]['name']) ?><br><?= h($committee[0]['position']) ?>
+                </div>
+                <div>
+                    (ลงชื่อ)........................................กรรมการ<br>
+                    <?= h($committee[1]['name']) ?><br><?= h($committee[1]['position']) ?>
+                </div>
+                <div>
+                    (ลงชื่อ)........................................กรรมการ<br>
+                    <?= h($committee[2]['name']) ?><br><?= h($committee[2]['position']) ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+        </article>
+        <?php if ($forWord && $hasSelectedHistory): ?>
+        <!-- Word page: Budget form begins on fresh page -->
+        <p class="word-part-page-break" style="page-break-before:always;break-before:page;page-break-after:auto;font-size:1pt;line-height:1pt;height:1pt;margin:0;padding:0">&nbsp;</p>
+        <?php endif; ?>
+        <article class="report-page budget-page">
+            <?php if ($hasSelectedHistory): ?>
+            <div style="text-align:right;font-weight:700;">แบบ บก.06</div>
+            <div class="doc-title" style="margin-top:.3cm;">
+                <div>ตารางแสดงวงเงินงบประมาณที่ได้รับจัดสรรและรายละเอียดค่าใช้จ่าย</div>
+                <div>การจัดซื้อจัดจ้างที่มิใช่งานก่อสร้าง</div>
+            </div>
+            <?php if ($forWord): ?>
+            <div class="budget-frame">
+                <table class="word-budget-table">
+                    <tr><td>๑. ชื่อโครงการ</td><td><?= h($meetingProjectName) ?></td></tr>
+                    <tr><td>๒. หน่วยงานเจ้าของโครงการ</td><td>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</td></tr>
+                    <tr><td>๓. วงเงินงบประมาณที่ได้รับการจัดสรร</td><td><?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</td></tr>
+                    <tr><td>๔. วันที่กำหนดราคากลาง (ราคาอ้างอิง)</td><td><?= h($meetingDate) ?><div>เป็นเงิน <?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></td></tr>
+                </table>
+                <div><strong>๕. แหล่งที่มาของราคากลาง (ราคาอ้างอิง) :</strong> <?= h($priceReferenceText) ?></div>
+                <div><strong>๖. เจ้าหน้าที่ผู้กำหนดราคากลาง (ราคาอ้างอิง)</strong></div>
+                <?php foreach ($committee as $i => $person): ?>
+                    <div><?= thaiDigits($i + 1) ?>. <?= h($person['name']) ?>&nbsp;&nbsp;<?= h($person['position']) ?>&nbsp;&nbsp;<?= h($person['role']) ?></div>
+                <?php endforeach; ?>
+            </div>
+            <?php else: ?>
+            <div class="budget-frame">
+                <div class="budget-line"><strong>๑. ชื่อโครงการ</strong><div><?= h($meetingProjectName) ?></div></div>
+                <div class="budget-line"><strong>๒. หน่วยงานเจ้าของโครงการ</strong><div>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div></div>
+                <div class="budget-line"><strong>๓. วงเงินงบประมาณที่ได้รับการจัดสรร</strong><div><?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></div>
+                <div class="budget-line"><strong>๔. วันที่กำหนดราคากลาง (ราคาอ้างอิง)</strong><div><?= h($meetingDate) ?><div>เป็นเงิน <?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></div></div>
+                <div><strong>๕. แหล่งที่มาของราคากลาง (ราคาอ้างอิง) :</strong> <?= h($priceReferenceText) ?></div>
+                <div style="margin-top:.2cm;"><strong>๖. เจ้าหน้าที่ผู้กำหนดราคากลาง (ราคาอ้างอิง)</strong></div>
+                <?php foreach ($committee as $i => $person): ?>
+                    <div class="budget-committee"><?= thaiDigits($i + 1) ?>. <?= h($person['name']) ?>&nbsp;&nbsp;<?= h($person['position']) ?>&nbsp;&nbsp;<?= h($person['role']) ?></div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+            <?php endif; ?>
+        </article>
+        <?php if ($forWord && $hasSelectedHistory): ?>
+        <!-- Word page: Annex table 1 begins on fresh page -->
+        <p class="word-part-page-break" style="page-break-before:always;break-before:page;page-break-after:auto;font-size:1pt;line-height:1pt;height:1pt;margin:0;padding:0">&nbsp;</p>
+        <?php endif; ?>
+        <article class="report-page annex-page">
+            <?php if ($hasSelectedHistory): ?>
+            <div class="doc-title">
+                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-meeting-annex="report_memo_no"><?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?></span> ลงวันที่ <span data-meeting-annex="report_doc_date"><?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></span></div>
+                <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
+                <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
+            </div>
+            <div class="annex-heading">ตารางที่ ๑ กำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยา <?= h($itemCountText) ?> รายการ</div>
+            <table class="annex-table">
+                <thead><tr><th style="width:8%">ลำดับ</th><th style="width:25%">รายการ</th><th style="width:17%">จำนวน/หน่วย</th><th>คุณสมบัติ</th></tr></thead>
+                <tbody>
+                    <?php foreach ($items as $i => $item): ?>
+                    <tr>
+                        <td class="center"><?= thaiDigits($i+1) ?></td>
+                        <td><?= h((string) ($item['name'] ?? '')) ?></td>
+                        <td><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></td>
+                        <td>
+                            <?php $itemSpecification = meetingItemSpecification($item); ?>
+                            <?php if ($itemSpecification !== ''): ?>
+                            <div class="spec-detail"><?= $forWord ? nl2br(h($itemSpecification)) : h($itemSpecification) ?></div>
+                            <?php else: ?>
+                            <?php $isTablet = in_array(trim((string) ($item['unit'] ?? '')), ['เม็ด', 'tablet', 'tablets'], true); ?>
+                            ๑.<?= $isTablet ? 'ยาเม็ดชนิดรับประทาน' : 'รูปแบบยาตามรายละเอียดของรายการ' ?><br>
+                            ๒.ประกอบด้วยตัวยา <?= h((string) ($item['name'] ?? '')) ?><br>
+                            ๓.<?= $isTablet ? 'บรรจุในขวด ภาชนะ ปิดสนิท' : 'ภาชนะบรรจุและรูปแบบตามคุณลักษณะเฉพาะที่บันทึกใน TOR' ?><br>
+                            ๔.ฉลาก<br>
+                            -ระบุชื่อยา ส่วนประกอบสำคัญและความแรง วันผลิต วันสิ้นอายุ เลขที่ผลิต และเลขทะเบียนตำรับยาไว้ชัดเจนปรากฏบนบรรจุภัณฑ์<br>
+                            -กรณีที่บรรจุในขวด หลอด แผง ต้องระบุวัน เดือน ปี ที่ยาหมดอายุ, เลขที่ผลิตไว้อย่างชัดเจน
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </article>
+        <?php if ($forWord && $hasSelectedHistory): ?>
+        <!-- Word page: Annex table 2 begins on fresh page, regardless of table 1 length -->
+        <p class="word-part-page-break" style="page-break-before:always;break-before:page;page-break-after:auto;font-size:1pt;line-height:1pt;height:1pt;margin:0;padding:0">&nbsp;</p>
+        <?php endif; ?>
+        <article class="report-page annex-page">
+            <?php if ($hasSelectedHistory): ?>
+            <div class="doc-title">
+                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-meeting-annex="report_memo_no"><?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?></span> ลงวันที่ <span data-meeting-annex="report_doc_date"><?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></span></div>
+                <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
+                <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
+            </div>
+            <div class="annex-heading">ตารางที่ ๒ กำหนดรายละเอียดราคากลางสำหรับการจัดซื้อยา <?= h($itemCountText) ?> รายการ</div>
+            <table class="annex-table">
+                <thead><tr><th style="width:7%">ลำดับ</th><th style="width:28%">รายการ</th><th style="width:17%">ราคากลาง (บาท)</th><th style="width:12%">หน่วย</th><th style="width:15%">จำนวนจัดซื้อ</th><th style="width:21%">จำนวนงบประมาณที่จัดซื้อ (บาท)</th></tr></thead>
+                <tbody>
+                    <?php foreach ($items as $i => $item): ?>
+                    <tr>
+                        <td class="center"><?= thaiDigits($i + 1) ?>.</td>
+                        <td><?= h((string) ($item['name'] ?? '')) ?></td>
+                        <td class="right"><?= meetingPriceText($item['offer_price'] ?? 0) ?><?php if (meetingItemHasPackage($item)): ?> (<?= quantityText($item['package_size']) ?> <?= h(meetingItemDisplayUnit($item)) ?>)<?php endif; ?></td>
+                        <td class="center"><?= h(meetingItemDisplayUnit($item)) ?></td>
+                        <td class="right"><?= quantityText(meetingItemDisplayQuantity($item)) ?></td>
+                        <td class="right"><?= money(meetingStoredTotal($item)) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <tr><td colspan="5"><strong>รวมเป็นเงิน</strong> -<?= h(meetingBahtText($offerTotal)) ?>-</td><td class="right"><strong><?= money($offerTotal) ?></strong></td></tr>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </article>
     <?php
     return (string) ob_get_clean();
+}
+
+function meetingReportWordHtml(array $data): string
+{
+    $pages = meetingReportDocumentPages($data, true);
+    return '<!doctype html><html lang="th"><head><meta charset="utf-8"><title>รายงานการประชุม</title>'
+        . '<style>' . <<<'CSS'
+@page { size:A4; margin:25mm 20mm 20mm 20mm; }
+body {margin:0;color:#111;font-family:"TH SarabunIT๙","TH Sarabun New",sans-serif;font-size:16pt;line-height:1;}
+.report-page {width:170mm;page-break-before:auto;page-break-after:auto;break-inside:auto;margin:0 auto;font-size:16pt;line-height:1;}
+/* Explicit page-break paragraph before each section; long tables/agenda continue naturally. */
+.word-part-page-break {page-break-before:always;break-before:page;page-break-after:auto;font-size:1pt;line-height:1pt;height:1pt;margin:0;padding:0;}
+.annex-table thead {display:table-header-group;}
+.annex-table thead tr {mso-table-header:yes;page-break-inside:avoid;}
+.doc-title {text-align:center;font-weight:700;line-height:1;margin:0 0 7pt;}
+.doc-title div {line-height:1;}
+.mt-2 {margin-top:8pt;}.mt-8 {margin-top:28pt;}
+.font-bold {font-weight:700;}.font-normal {font-weight:400;}
+.center {text-align:center;}.right {text-align:right;}
+.word-committee-list,.word-signature-table,.word-budget-table {width:100%;table-layout:fixed;border-collapse:collapse;border:0;margin:0;}
+.word-committee-list td,.word-signature-table td,.word-budget-table td {border:0;padding:0 3pt 0 0;vertical-align:top;line-height:1;font-size:16pt;}
+.word-committee-list td {padding-bottom:1pt;}
+/* Fixed columns shared by all agenda headings and speeches; Word must not auto-size rows individually. */
+.word-agenda-table {width:170mm!important;max-width:170mm;table-layout:fixed;mso-table-layout-alt:fixed;border-collapse:collapse;border:0;border-spacing:0;margin:0;mso-table-lspace:0pt;mso-table-rspace:0pt;}
+.word-agenda-table td {border:0;vertical-align:top;font-size:16pt;line-height:1;padding:0;}
+.word-agenda-table .word-speech-label {width:22%!important;max-width:37.4mm;font-weight:700;padding-right:8pt!important;white-space:normal;}
+.word-agenda-table .word-speech-content {width:78%!important;text-align:left!important;text-justify:auto!important;-ms-text-justify:auto!important;letter-spacing:normal!important;word-spacing:normal!important;}
+.word-agenda-heading td {padding-top:7pt!important;font-weight:700;}
+.word-agenda-table .word-speech-content .content,
+.word-agenda-table .word-speech-content .content * {white-space:normal;text-align:left!important;text-justify:auto!important;-ms-text-justify:auto!important;letter-spacing:normal!important;word-spacing:normal!important;line-height:1;}
+.word-agenda-table .word-speech-content p {margin:0;line-height:1;mso-line-height-rule:exactly;text-align:left!important;}
+.medicine-lines {margin:1pt 0;}
+.medicine-lines table {width:100%;border-collapse:collapse;table-layout:fixed;}
+.medicine-lines td {border:0;padding:0 5pt 0 0;vertical-align:top;}
+.word-signature-table {margin-top:28pt;text-align:center;page-break-inside:avoid;}
+.word-signature-table td {width:50%;padding-top:8pt;text-align:center;}
+.attendance-table,.annex-table {width:100%;border-collapse:collapse;table-layout:fixed;border-spacing:0;}
+.attendance-table {margin-top:28pt;}
+.attendance-table th,.attendance-table td,.annex-table th,.annex-table td {border:0.5pt solid #000;padding:3pt;vertical-align:top;font-size:16pt;line-height:1;}
+.attendance-table th,.annex-table th {font-weight:700;text-align:center;}
+.attendance-table thead,.annex-table thead {display:table-header-group;}
+.attendance-table tr,.annex-table tr {page-break-inside:avoid;}
+.budget-frame {border:0.5pt solid #000;padding:8pt;margin-top:12pt;}
+.word-budget-table td:first-child {width:52%;font-weight:700;}
+.word-budget-table td:last-child {width:48%;}
+.word-budget-table td {padding:3pt 0;}
+.annex-heading {font-weight:700;margin:12pt 0 6pt;}
+.spec-detail {white-space:pre-line;overflow-wrap:anywhere;}
+CSS
+        . '</style></head><body>' . $pages . '</body></html>';
 }
 
 function ensureTorHistoriesTable(): void
@@ -867,24 +1016,31 @@ if (($_POST['action'] ?? '') === 'save_document') {
 }
 
 $hasPackageItems = count(array_filter($items, 'meetingItemHasPackage')) > 0;
+$meetingDocumentData = [
+    'hasSelectedHistory' => $hasSelectedHistory,
+    'meetingTitle' => $meetingTitle,
+    'purposeLine' => $purposeLine,
+    'fiscalLine' => $fiscalLine,
+    'meetingDate' => $meetingDate,
+    'meetingTime' => $meetingTime,
+    'meetingPlace' => $meetingPlace,
+    'openTime' => $openTime,
+    'closeTime' => $closeTime,
+    'absentText' => $absentText,
+    'committee' => $committee,
+    'items' => $items,
+    'itemCountText' => $itemCountText,
+    'offerTotal' => $offerTotal,
+    'agendaOrder' => $agendaOrder,
+    'agendaTitles' => $agendaTitles,
+    'speechesByAgenda' => $speechesByAgenda,
+    'meetingProjectName' => $meetingProjectName,
+    'priceReferenceText' => $priceReferenceText,
+    'reportMemoNo' => $reportMemoNo,
+    'reportDocDate' => $reportDocDate,
+];
 if (($_POST['action'] ?? '') === 'word') {
-    $meetingWordHtml = meetingReportWordHtml([
-        'meeting_title' => $meetingTitle,
-        'purpose_line' => $purposeLine,
-        'fiscal_line' => $fiscalLine,
-        'meeting_date' => $meetingDate,
-        'meeting_time' => $meetingTime,
-        'meeting_place' => $meetingPlace,
-        'open_time' => $openTime,
-        'close_time' => $closeTime,
-        'absent_text' => $absentText,
-        'committee' => $committee,
-        'items' => $items,
-        'offer_total' => $offerTotal,
-        'agenda_order' => $agendaOrder,
-        'agenda_titles' => $agendaTitles,
-        'speeches_by_agenda' => $speechesByAgenda,
-    ]);
+    $meetingWordHtml = meetingReportWordHtml($meetingDocumentData);
     try {
         outputWordHtml($meetingWordHtml, meetingReportWordFilename($meetingDate, $itemCountText), '', 'meeting');
     } catch (Throwable $wordError) {
@@ -919,11 +1075,15 @@ $timeFields = [
             suffix: "";
         }
         @page { size: A4; margin: 2.5cm 2cm 2cm 2cm; }
+
+        @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Regular.ttf") format("truetype");font-weight:400;font-style:normal;}
+        @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Bold.ttf") format("truetype");font-weight:700;font-style:normal;}
         @page report {
+            size:A4; margin:30mm 20mm 20mm 20mm;
             @top-center {
                 content: "- " counter(page, thai-page) " -";
-                font-family: "TH Sarabun New", "Sarabun", sans-serif;
-                font-size: 16pt;
+                font-family: "WorkflowThaiPrint", "TH Sarabun New", sans-serif;
+                font-size: 16pt; font-weight:400; vertical-align:middle; margin:0; padding:0;
             }
         }
         @page report:first {
@@ -1059,7 +1219,7 @@ $timeFields = [
             html, body { margin: 0 !important; padding: 0 !important; }
             .no-print { display: none !important; }
             main { display: block !important; max-width: none !important; padding: 0 !important; margin: 0 !important; }
-            .report-page { width: auto; min-height: 0; margin: 0; padding: 0; page-break-after: always; }
+            .report-page { width: auto; min-height: 0; margin: 0; padding: 0; page-break-after: always; font-family:"WorkflowThaiPrint","TH Sarabun New",sans-serif; }
             .report-page:last-child { page-break-after: auto; }
 
             /* A single collapsed 1px rule avoids overlapping outer/table-cell
@@ -1250,207 +1410,7 @@ $timeFields = [
             <p class="mt-1 text-sm" style="color:#334155 !important;">นี่คือตัวอย่างรายงานจากข้อมูลที่บันทึกไว้ในโครงการและประวัติ TOR ที่เลือก หากต้องการแก้ไขเพิ่มเติม ใช้ฟอร์มด้านข้างแล้วกดบันทึกอีกครั้ง</p>
         </div>
         <?php endif; ?>
-        <article class="report-page attendance-page">
-            <?php if ($hasSelectedHistory): ?>
-            <div class="doc-title">
-                <div>รายงานการประชุม</div>
-                <div>คณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง</div>
-                <div>เพื่อจัดหาการจัดซื้อยา จำนวน <?= h($itemCountText) ?> รายการ</div>
-                <div>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div>
-                <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
-                <div>ณ&nbsp;&nbsp;<?= h($meetingPlace) ?></div>
-            </div>
-
-            <table class="attendance-table">
-                <thead>
-                <tr>
-                    <th style="width: 8%">ลำดับ</th>
-                    <th>รายชื่อคณะกรรมการ<br>ผู้เข้าร่วมประชุม</th>
-                    <th style="width: 20%">ตำแหน่ง</th>
-                    <th style="width: 20%">ลายมือชื่อ</th>
-                    <th style="width: 20%">หมายเหตุ</th>
-                </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($committee as $i => $person): ?>
-                    <tr>
-                        <td class="center"><?= thaiDigits($i + 1) ?></td>
-                        <td><?= h($person['name']) ?></td>
-                        <td><?= h($person['role']) ?></td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-            <?php endif; ?>
-        </article>
-
-        <article class="report-page report-main">
-            <?php if ($hasSelectedHistory): ?>
-            <div class="doc-title">
-                <div>รายงานการประชุม<?= h(preg_replace('/^รายงานการประชุม/u', '', $meetingTitle) ?? $meetingTitle) ?></div>
-                <div><?= h($purposeLine) ?></div>
-                <div><?= h($fiscalLine) ?></div>
-                <div>วันที่ <?= h($meetingDate) ?> เวลา <?= h($meetingTime) ?></div>
-                <div>ณ&nbsp;&nbsp;<?= h($meetingPlace) ?></div>
-            </div>
-
-            <div class="mt-8 font-bold">ผู้เข้าประชุม</div>
-            <?php foreach ($committee as $i => $person): ?>
-                <div class="attendee-grid thai-justify">
-                    <div><?= thaiDigits($i + 1) ?>.</div>
-                    <div><?= h($person['name']) ?></div>
-                    <div><?= h($person['position']) ?></div>
-                    <div><?= h($person['role']) ?></div>
-                </div>
-            <?php endforeach; ?>
-            <div class="mt-2 font-bold">ผู้ไม่เข้าประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal"><?= h($absentText) ?></span></div>
-            <div class="mt-2 font-bold">เปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal">เวลา <?= h($openTime) ?></span></div>
-
-            <?php $shownAgendaIndex = 0; ?>
-            <?php foreach ($agendaOrder as $agendaName): ?>
-                <?php if (empty($speechesByAgenda[$agendaName])) continue; ?>
-                <div class="speech-row agenda-heading <?= $shownAgendaIndex === 0 ? 'first-agenda' : '' ?>">
-                    <div class="topic"><?= h($agendaName) ?></div>
-                    <div class="topic"><?= h($agendaTitles[$agendaName] ?? '') ?></div>
-                </div>
-                <?php $shownAgendaIndex++; ?>
-                <?php foreach ($speechesByAgenda[$agendaName] as $speechIndex => $speech): ?>
-                    <div class="speech-row thai-justify">
-                        <div class="speech-left">
-                            <?php $speakerLines = array_values(array_filter(array_map('trim', explode("\n", displayText((string) ($speech['speaker'] ?? '')))), fn($line) => $line !== '')); ?>
-                            <?php if ($speakerLines): ?>
-                                <div class="speaker">
-                                    <?php foreach ($speakerLines as $line): ?>
-                                        <span class="speaker-line"><?= h($line) ?></span>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                        <div class="speech-body">
-                            <?php $contentText = displayText((string) ($speech['content'] ?? '')); ?>
-                            <?php if (str_contains($contentText, '[medicine_items]')): ?>
-                                <?php [$beforeItems, $afterItems] = array_pad(explode('[medicine_items]', $contentText, 2), 2, ''); ?>
-                                <div class="content"><?= compactBreaks(nl2br(h(displayText($beforeItems)))) ?></div>
-                                <div class="medicine-lines">
-                                    <?php foreach ($items as $i => $item): ?>
-                                        <div class="medicine-line">
-                                            <div><?= thaiDigits($i + 1) ?>. <?= h((string) ($item['name'] ?? '')) ?></div>
-                                            <div class="qty"><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                                <div class="content"><?= compactBreaks(nl2br(h(displayText($afterItems)))) ?></div>
-                            <?php else: ?>
-                                <div class="content"><?= compactBreaks(nl2br(h($contentText))) ?></div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-
-            <?php endforeach; ?>
-
-            <div class="mt-2 font-bold">ปิดประชุม&nbsp;&nbsp;&nbsp;&nbsp;<span class="font-normal"><?= h($closeTime) ?></span></div>
-
-            <div class="signature-grid">
-                <div class="chair">
-                    (ลงชื่อ)........................................ประธานกรรมการ<br>
-                    <?= h($committee[0]['name']) ?><br><?= h($committee[0]['position']) ?>
-                </div>
-                <div>
-                    (ลงชื่อ)........................................กรรมการ<br>
-                    <?= h($committee[1]['name']) ?><br><?= h($committee[1]['position']) ?>
-                </div>
-                <div>
-                    (ลงชื่อ)........................................กรรมการ<br>
-                    <?= h($committee[2]['name']) ?><br><?= h($committee[2]['position']) ?>
-                </div>
-            </div>
-            <?php endif; ?>
-        </article>
-        <article class="report-page budget-page">
-            <?php if ($hasSelectedHistory): ?>
-            <div style="text-align:right;font-weight:700;">แบบ บก.06</div>
-            <div class="doc-title" style="margin-top:.3cm;">
-                <div>ตารางแสดงวงเงินงบประมาณที่ได้รับจัดสรรและรายละเอียดค่าใช้จ่าย</div>
-                <div>การจัดซื้อจัดจ้างที่มิใช่งานก่อสร้าง</div>
-            </div>
-            <div class="budget-frame">
-                <div class="budget-line"><strong>๑. ชื่อโครงการ</strong><div><?= h($meetingProjectName) ?></div></div>
-                <div class="budget-line"><strong>๒. หน่วยงานเจ้าของโครงการ</strong><div>ศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูล</div></div>
-                <div class="budget-line"><strong>๓. วงเงินงบประมาณที่ได้รับการจัดสรร</strong><div><?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></div>
-                <div class="budget-line"><strong>๔. วันที่กำหนดราคากลาง (ราคาอ้างอิง)</strong><div><?= h($meetingDate) ?><div>เป็นเงิน <?= money($offerTotal) ?> บาท (<?= h(meetingBahtText($offerTotal)) ?>)</div></div></div>
-                <div><strong>๕. แหล่งที่มาของราคากลาง (ราคาอ้างอิง) :</strong> <?= h($priceReferenceText) ?></div>
-                <div style="margin-top:.2cm;"><strong>๖. เจ้าหน้าที่ผู้กำหนดราคากลาง (ราคาอ้างอิง)</strong></div>
-                <?php foreach ($committee as $i => $person): ?>
-                    <div class="budget-committee"><?= thaiDigits($i + 1) ?>. <?= h($person['name']) ?>&nbsp;&nbsp;<?= h($person['position']) ?>&nbsp;&nbsp;<?= h($person['role']) ?></div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; ?>
-        </article>
-        <article class="report-page annex-page">
-            <?php if ($hasSelectedHistory): ?>
-            <div class="doc-title">
-                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-meeting-annex="report_memo_no"><?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?></span> ลงวันที่ <span data-meeting-annex="report_doc_date"><?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></span></div>
-                <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
-                <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
-            </div>
-            <div class="annex-heading">ตารางที่ ๑ กำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยา <?= h($itemCountText) ?> รายการ</div>
-            <table class="annex-table">
-                <thead><tr><th style="width:8%">ลำดับ</th><th style="width:25%">รายการ</th><th style="width:17%">จำนวน/หน่วย</th><th>คุณสมบัติ</th></tr></thead>
-                <tbody>
-                    <?php foreach ($items as $i => $item): ?>
-                    <tr>
-                        <td class="center"><?= thaiDigits($i+1) ?></td>
-                        <td><?= h((string) ($item['name'] ?? '')) ?></td>
-                        <td><?= quantityText(meetingItemDisplayQuantity($item)) ?> <?= h(meetingItemDisplayUnit($item)) ?></td>
-                        <td>
-                            <?php $itemSpecification = meetingItemSpecification($item); ?>
-                            <?php if ($itemSpecification !== ''): ?>
-                            <div class="spec-detail"><?= h($itemSpecification) ?></div>
-                            <?php else: ?>
-                            <?php $isTablet = in_array(trim((string) ($item['unit'] ?? '')), ['เม็ด', 'tablet', 'tablets'], true); ?>
-                            ๑.<?= $isTablet ? 'ยาเม็ดชนิดรับประทาน' : 'รูปแบบยาตามรายละเอียดของรายการ' ?><br>
-                            ๒.ประกอบด้วยตัวยา <?= h((string) ($item['name'] ?? '')) ?><br>
-                            ๓.<?= $isTablet ? 'บรรจุในขวด ภาชนะ ปิดสนิท' : 'ภาชนะบรรจุและรูปแบบตามคุณลักษณะเฉพาะที่บันทึกใน TOR' ?><br>
-                            ๔.ฉลาก<br>
-                            -ระบุชื่อยา ส่วนประกอบสำคัญและความแรง วันผลิต วันสิ้นอายุ เลขที่ผลิต และเลขทะเบียนตำรับยาไว้ชัดเจนปรากฏบนบรรจุภัณฑ์<br>
-                            -กรณีที่บรรจุในขวด หลอด แผง ต้องระบุวัน เดือน ปี ที่ยาหมดอายุ, เลขที่ผลิตไว้อย่างชัดเจน
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-            <?php endif; ?>
-        </article>
-        <article class="report-page annex-page">
-            <?php if ($hasSelectedHistory): ?>
-            <div class="doc-title">
-                <div>เอกสารแนบท้ายหนังสือ ที่ ชม ๕๑๐๐๖.๑๓.๑/<span data-meeting-annex="report_memo_no"><?= h($reportMemoNo !== '' ? $reportMemoNo : '.................') ?></span> ลงวันที่ <span data-meeting-annex="report_doc_date"><?= h($reportDocDate !== '' ? $reportDocDate : '........................') ?></span></div>
-                <div>เรื่อง รายงานผลการพิจารณากำหนดรายละเอียดคุณลักษณะเฉพาะสำหรับการจัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย</div>
-                <div>เพื่อใช้ในการรักษาพยาบาลประชาชนของศูนย์สาธารณสุขและการแพทย์ตำบลทรายมูลและเครือข่ายหน่วยบริการปฐมภูมิ</div>
-            </div>
-            <div class="annex-heading">ตารางที่ ๒ กำหนดรายละเอียดราคากลางสำหรับการจัดซื้อยา <?= h($itemCountText) ?> รายการ</div>
-            <table class="annex-table">
-                <thead><tr><th style="width:7%">ลำดับ</th><th style="width:28%">รายการ</th><th style="width:17%">ราคากลาง (บาท)</th><th style="width:12%">หน่วย</th><th style="width:15%">จำนวนจัดซื้อ</th><th style="width:21%">จำนวนงบประมาณที่จัดซื้อ (บาท)</th></tr></thead>
-                <tbody>
-                    <?php foreach ($items as $i => $item): ?>
-                    <tr>
-                        <td class="center"><?= thaiDigits($i + 1) ?>.</td>
-                        <td><?= h((string) ($item['name'] ?? '')) ?></td>
-                        <td class="right"><?= meetingPriceText($item['offer_price'] ?? 0) ?><?php if (meetingItemHasPackage($item)): ?> (<?= quantityText($item['package_size']) ?> <?= h(meetingItemDisplayUnit($item)) ?>)<?php endif; ?></td>
-                        <td class="center"><?= h(meetingItemDisplayUnit($item)) ?></td>
-                        <td class="right"><?= quantityText(meetingItemDisplayQuantity($item)) ?></td>
-                        <td class="right"><?= money(meetingStoredTotal($item)) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <tr><td colspan="5"><strong>รวมเป็นเงิน</strong> -<?= h(meetingBahtText($offerTotal)) ?>-</td><td class="right"><strong><?= money($offerTotal) ?></strong></td></tr>
-                </tbody>
-            </table>
-            <?php endif; ?>
-        </article>
+        <?= meetingReportDocumentPages($meetingDocumentData) ?>
     </section>
 </main>
 <script src="assets/js/word_export.js"></script>

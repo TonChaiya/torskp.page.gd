@@ -703,18 +703,24 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
             symbols: "๐" "๑" "๒" "๓" "๔" "๕" "๖" "๗" "๘" "๙";
             suffix: "";
         }
+
+        @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Regular.ttf") format("truetype");font-weight:400;font-style:normal;}
+        @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Bold.ttf") format("truetype");font-weight:700;font-style:normal;}
         @page memo {
-            size: 210mm 297mm;
-            margin: 25mm 20mm 20mm 30mm;
+            size: A4;
+            margin: 30mm 20mm 20mm 30mm;
             @top-center {
                 content: "- " counter(page, thai-decimal) " -";
-                font-family: "TH Sarabun New", "Sarabun", sans-serif;
-                font-size: 14pt;
-                padding-top: 12.5mm;
+                font-family: "WorkflowThaiPrint", "TH Sarabun New", sans-serif;
+                font-size: 16pt;
+                font-weight: 400;
+                vertical-align: middle;
+                margin: 0; padding: 0;
             }
         }
         @page memo:first {
-            @top-center { content: ""; }
+            margin-top: 25mm;
+            @top-center { content: none; }
         }
         .memo-page {
             page: memo;
@@ -800,6 +806,8 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
             }
             .document-stack { display: block !important; }
             .memo-page {
+                page: memo;
+                font-family: "WorkflowThaiPrint", "TH Sarabun New", sans-serif;
                 width: auto;
                 min-height: 0;
                 margin: 0;

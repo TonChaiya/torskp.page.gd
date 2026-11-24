@@ -14,6 +14,77 @@ function memoPerson($person, string $role): array {
     $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) $person) ?: []), static fn($line)=>$line!==''));
     return ['name'=>$lines[0] ?? '', 'position'=>$lines[1] ?? '', 'role'=>$role];
 }
+
+/** One document renderer for the browser preview and DOCX: the same field values and layout. */
+function committeeResultDocumentHtml(array $values, string $memoNo, string $docDate, array $committee, bool $forWord = false): string
+{
+    $garudaSrc = 'picture/picture-1.png';
+    if ($forWord && is_file(__DIR__ . '/picture/picture-1.png')) {
+        $bytes = file_get_contents(__DIR__ . '/picture/picture-1.png');
+        if (is_string($bytes)) $garudaSrc = 'data:image/png;base64,' . base64_encode($bytes);
+    }
+    ob_start();
+    ?>
+          <section class="memo-sheet">
+            <table class="memo-head" role="presentation"><tr><td style="width:3cm"><img src="<?= h($garudaSrc) ?>" class="garuda" alt="ตราครุฑ"></td><td class="memo-heading">บันทึกข้อความ</td><td style="width:3cm">&nbsp;</td></tr></table>
+            <div class="memo-meta"><span class="memo-label">ส่วนราชการ</span><span class="memo-value" data-memo-output="office"><?=h($values['office'])?></span></div>
+            <div class="memo-meta-no"><span class="memo-label">ที่</span><span class="memo-value">ชม ๕๑๐๐๖.๑๓.๑/<span data-memo-output="memo_no_suffix" data-digits="thai"><?=h(thaiMemoDigits($memoNo))?></span></span><span class="memo-label">วันที่</span><span class="memo-value" data-memo-output="doc_date" data-digits="thai"><?=h(thaiMemoDigits($docDate))?></span></div>
+            <div class="memo-meta"><span class="memo-label">เรื่อง</span><span class="memo-value" data-memo-output="subject"><?=h($values['subject'])?></span></div>
+            <div class="memo-meta" style="margin-top:8pt"><span class="memo-label">เรียน</span><span class="memo-value" data-memo-output="recipient"><?=h($values['recipient'])?></span></div>
+            <div class="memo-section">ต้นเรื่อง</div><p class="memo-paragraph" data-memo-output="origin"><?=h($values['origin'])?></p>
+            <div class="memo-section">ข้อเท็จจริง</div><p class="memo-paragraph" data-memo-output="facts"><?=h($values['facts'])?></p>
+            <div class="memo-section">ข้อพิจารณา</div><p class="memo-paragraph" data-memo-output="consideration"><?=h($values['consideration'])?></p>
+            <p class="memo-paragraph" style="margin-top:12pt" data-memo-output="conclusion"><?=h($values['conclusion'])?></p>
+            <div class="memo-signatures">
+              <div class="memo-signature"><div>(ลงชื่อ)................................................ประธานกรรมการ</div><div class="name"><?=h($committee[0]['name']!==''?$committee[0]['name']:'........................................')?></div><div><?=h($committee[0]['position'])?></div></div>
+              <div class="memo-signature-row">
+                <?php foreach([1,2] as $i): ?><div class="memo-signature"><div>(ลงชื่อ)....................................กรรมการ</div><div class="name"><?=h($committee[$i]['name']!==''?$committee[$i]['name']:'........................................')?></div><div><?=h($committee[$i]['position'])?></div></div><?php endforeach ?>
+              </div>
+            </div>
+            <div class="memo-page-footer">/ความเห็นของ…</div>
+          </section>
+          <section class="memo-sheet">
+            <div class="memo-sheet-header-number">-๒-</div>
+            <div class="memo-page-2-title" data-memo-output="first_opinion_title"><?=h($values['first_opinion_title'])?></div>
+            <div class="memo-opinion"><div class="memo-check"><span data-memo-check="first_decision:approved"><?= $values['first_decision']==='approved'?'☑':'☐' ?></span> เห็นชอบ</div><div class="memo-check"><span data-memo-check="first_decision:other"><?= $values['first_decision']==='other'?'☑':'☐' ?></span> อื่น ๆ <span data-memo-output="first_other" data-placeholder="........................................................"><?=h($values['first_other']!==''?$values['first_other']:'........................................................')?></span></div><div class="memo-opinion-signature">(<span data-memo-output="first_signer_name"><?=h($values['first_signer_name'])?></span>)<div data-memo-output="first_signer_position"><?=h($values['first_signer_position'])?></div></div></div>
+            <div class="memo-page-2-title" data-memo-output="second_opinion_title"><?=h($values['second_opinion_title'])?></div>
+            <div class="memo-opinion"><div class="memo-check"><span data-memo-check="second_decision:approved"><?= $values['second_decision']==='approved'?'☑':'☐' ?></span> อนุมัติ</div><div class="memo-check"><span data-memo-check="second_decision:rejected"><?= $values['second_decision']==='rejected'?'☑':'☐' ?></span> ไม่อนุมัติ</div><div class="memo-opinion-signature">(<span data-memo-output="second_signer_name"><?=h($values['second_signer_name'])?></span>)<div data-memo-output="second_signer_position"><?=h($values['second_signer_position'])?></div></div></div>
+          </section>
+    <?php
+    return (string) ob_get_clean();
+}
+
+/** DOCX uses the exact same HTML as the browser preview. */
+function committeeResultWordCss(): string
+{
+    return <<<'CSS'
+@page{size:A4;margin:25mm 20mm 20mm 30mm;}
+body{margin:0;color:#111;font-family:"TH SarabunIT๙","TH Sarabun New",sans-serif;font-size:16pt;line-height:1.05;}
+.memo-sheet{width:160mm;min-height:0;margin:0;padding:0;color:#111;font-family:"TH SarabunIT๙","TH Sarabun New",sans-serif;font-size:16pt;line-height:1.07;}
+.memo-sheet+.memo-sheet{page-break-before:always;break-before:page;}
+.memo-head{width:100%;display:table;table-layout:fixed;border-collapse:collapse;margin:0 0 3pt;}
+.memo-head td{padding:0;border:0;vertical-align:top;}
+.memo-head .memo-heading{font-size:29pt!important;font-weight:bold;text-align:center;}
+.memo-head img{height:1.5cm;max-height:1.5cm;width:auto;}
+.memo-heading{font-size:29pt;font-weight:bold;text-align:center;}
+.memo-meta,.memo-meta-no{margin:2pt 0;}
+.memo-label{font-size:20pt;font-weight:bold;}
+.memo-value{font-size:16pt;}
+.memo-section{font-weight:bold;margin:8pt 0 3pt;text-indent:2.5cm;}
+.memo-paragraph{font-size:16pt;line-height:1.05;text-indent:2.5cm;margin:0 0 5pt;white-space:pre-line;text-align:justify;}
+.memo-signatures{margin-top:14pt;text-align:center;}
+.memo-signature{text-align:center;margin:0 auto 10pt;}
+.memo-signature-row{width:100%;display:table;table-layout:fixed;}
+.memo-signature-row .memo-signature{display:table-cell;width:50%;text-align:center;}
+.memo-page-footer{text-align:right;margin-top:10pt;}
+.memo-sheet-header-number{text-align:center;font-size:16pt;margin:0 0 14pt;}
+.memo-page-2-title{font-size:16pt;font-weight:bold;margin:0 0 8pt;}
+.memo-opinion{margin-bottom:25mm;}
+.memo-check{margin:6pt 0;}
+.memo-opinion-signature{text-align:center;margin:18mm 0 10mm;white-space:pre-line;}
+CSS;
+}
+
 $caseId = (int) ($_POST['case_id'] ?? $_GET['case_id'] ?? 0);
 $case = $caseId > 0 ? procurementCase($caseId) : null;
 $caseOptions = procurementCases();
@@ -75,6 +146,20 @@ if (($_POST['action']??'')==='save_document') {
         saveProcurementDocument($caseId,'committee_scope_result_memo',$memoNo,$docDate,$values);
         header('Location: committee_scope_result_memo.php?case_id='.$caseId.'&saved=1#memo-preview',true,303);
         exit;
+    }
+}
+if (($_POST['action'] ?? '') === 'word_document') {
+    if (!$case) $error = 'กรุณาเลือกชุดเอกสารก่อนดาวน์โหลด Word';
+    elseif (!$history) $error = 'ยังไม่พบ TOR ของชุดเอกสารนี้ กรุณาบันทึก TOR ก่อน';
+    else {
+        require_once __DIR__ . '/core/word_export_lib.php';
+        $name = 'รายงานผลการพิจารณา เลขที่ ' . thaiMemoDigits(trim($memoNo) !== '' ? trim($memoNo) : 'ยังไม่ระบุ') . '.docx';
+        try {
+            outputWordHtml(committeeResultDocumentHtml($values, $memoNo, $docDate, $committee, true), $name, committeeResultWordCss(), 'principle');
+        } catch (Throwable $wordError) {
+            error_log('Result memo DOCX export failed: '.$wordError->getMessage());
+            $error = 'สร้างไฟล์ Word ไม่สำเร็จ กรุณาตรวจสอบ PHP ZipArchive และ core/word_export_lib.php';
+        }
     }
 }
 ?>
@@ -168,7 +253,8 @@ if (($_POST['action']??'')==='save_document') {
   /* A4 document canvas is deliberately isolated from the application's UI. */
   .memo-sheet { width:210mm; min-height:297mm; padding:25mm 20mm 20mm 30mm; margin:0 auto 12mm; background:#fff; color:#111; font-family:"TH Sarabun New","Sarabun",sans-serif; font-size:16pt; line-height:1.2; box-shadow:0 10px 28px rgba(15,23,42,.14); }
   .memo-sheet, .memo-sheet * { color:#111; }
-  .memo-sheet .memo-head { display:grid; grid-template-columns:3cm minmax(0,1fr) 3cm; align-items:start; }
+  .memo-sheet .memo-head { display:table; width:100%; table-layout:fixed; border-collapse:collapse; }
+  .memo-sheet .memo-head td { padding:0; border:0; vertical-align:top; }
   .memo-sheet .garuda { width:auto; height:1.5cm; display:block; }
   .memo-sheet .memo-heading { text-align:center; font-size:29pt; font-weight:700; line-height:1; padding-top:8pt; margin:0; }
   .memo-sheet .memo-meta { display:grid; grid-template-columns:auto minmax(0,1fr); gap:0 8pt; align-items:baseline; margin-top:3pt; }
@@ -211,13 +297,19 @@ if (($_POST['action']??'')==='save_document') {
     .result-preview-heading { align-items:flex-start; }
     .result-document-stack { margin-left:0; }
   }
+  @counter-style result-memo-thai {system:numeric;symbols:"๐" "๑" "๒" "๓" "๔" "๕" "๖" "๗" "๘" "๙";suffix:"";}
+
+        @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Regular.ttf") format("truetype");font-weight:400;font-style:normal;}
+        @font-face {font-family:"WorkflowThaiPrint";src:url("assets/fonts/THSarabunIT9-Bold.ttf") format("truetype");font-weight:700;font-style:normal;}
+  @page resultMemo {size:A4;margin:30mm 20mm 20mm 30mm;@top-center {content:"- " counter(page,result-memo-thai) " -";font-family:"WorkflowThaiPrint","TH Sarabun New",sans-serif;font-size:16pt;font-weight:400;vertical-align:middle;margin:0;padding:0;}}
+  @page resultMemo:first {margin-top:25mm;@top-center{content:none;}}
   @media print {
-    @page { size:A4; margin:0; }
     html,body.result-memo-app { margin:0!important; padding:0!important; background:#fff!important; width:auto!important; min-width:0!important; }
     .no-print, .result-top, .result-editor-column, .result-preview-heading { display:none!important; }
     .result-layout, .result-workspace, .result-preview-column, .result-preview-stage { display:block!important; width:auto!important; max-width:none!important; margin:0!important; padding:0!important; overflow:visible!important; height:auto!important; }
     .result-document-stack { display:block!important; width:auto!important; margin:0!important; padding:0!important; transform:none!important; }
-    .memo-sheet { width:210mm!important; min-height:297mm; height:auto; padding:25mm 20mm 20mm 30mm; margin:0!important; box-shadow:none!important; break-after:page; page-break-after:always; }
+    .memo-sheet { page:resultMemo; font-family:"WorkflowThaiPrint","TH Sarabun New",sans-serif!important; width:auto!important; min-height:0; height:auto; padding:0!important; margin:0!important; box-shadow:none!important; break-after:page; page-break-after:always; }
+    .memo-sheet-header-number { display:none!important; }
     .memo-sheet:last-child { break-after:auto; page-break-after:auto; }
   }
 </style>
@@ -242,35 +334,11 @@ if (($_POST['action']??'')==='save_document') {
     <section class="result-preview-column" id="memo-preview" aria-label="ตัวอย่างบันทึกข้อความ">
       <div class="result-preview-heading no-print">
         <div><h2>ตัวอย่างเอกสาร</h2><div class="result-preview-hint">A4 · 2 หน้า · ปรับตามข้อมูลที่กรอก (ต้องกดบันทึกเพื่อจัดเก็บ)</div></div>
-        <div class="result-preview-toolbar"><button type="button" class="result-small-button" id="result-preview-zoom" aria-pressed="false">ขนาดจริง</button><button type="button" class="result-small-button" onclick="window.print()">พิมพ์ / PDF</button></div>
+        <div class="result-preview-toolbar"><button type="button" class="result-small-button" id="result-preview-zoom" aria-pressed="false">ขนาดจริง</button><button type="submit" form="memo-form" name="action" value="word_document" class="result-small-button" <?= !$history?'disabled':'' ?>>ดาวน์โหลด Word</button><button type="button" class="result-small-button" onclick="window.print()">พิมพ์ / PDF</button></div>
       </div>
       <div class="result-preview-stage" id="result-preview-stage">
         <div class="result-document-stack" id="result-document-stack">
-          <section class="memo-sheet">
-            <div class="memo-head"><img src="picture/picture-1.png" class="garuda" alt="ตราครุฑ"><h2 class="memo-heading">บันทึกข้อความ</h2><div></div></div>
-            <div class="memo-meta"><span class="memo-label">ส่วนราชการ</span><span class="memo-value" data-memo-output="office"><?=h($values['office'])?></span></div>
-            <div class="memo-meta-no"><span class="memo-label">ที่</span><span class="memo-value">ชม ๕๑๐๐๖.๑๓.๑/<span data-memo-output="memo_no_suffix" data-digits="thai"><?=h(thaiMemoDigits($memoNo))?></span></span><span class="memo-label">วันที่</span><span class="memo-value" data-memo-output="doc_date" data-digits="thai"><?=h(thaiMemoDigits($docDate))?></span></div>
-            <div class="memo-meta"><span class="memo-label">เรื่อง</span><span class="memo-value" data-memo-output="subject"><?=h($values['subject'])?></span></div>
-            <div class="memo-meta" style="margin-top:8pt"><span class="memo-label">เรียน</span><span class="memo-value" data-memo-output="recipient"><?=h($values['recipient'])?></span></div>
-            <div class="memo-section">ต้นเรื่อง</div><p class="memo-paragraph" data-memo-output="origin"><?=h($values['origin'])?></p>
-            <div class="memo-section">ข้อเท็จจริง</div><p class="memo-paragraph" data-memo-output="facts"><?=h($values['facts'])?></p>
-            <div class="memo-section">ข้อพิจารณา</div><p class="memo-paragraph" data-memo-output="consideration"><?=h($values['consideration'])?></p>
-            <p class="memo-paragraph" style="margin-top:12pt" data-memo-output="conclusion"><?=h($values['conclusion'])?></p>
-            <div class="memo-signatures">
-              <div class="memo-signature"><div>(ลงชื่อ)................................................ประธานกรรมการ</div><div class="name"><?=h($committee[0]['name']!==''?$committee[0]['name']:'........................................')?></div><div><?=h($committee[0]['position'])?></div></div>
-              <div class="memo-signature-row">
-                <?php foreach([1,2] as $i): ?><div class="memo-signature"><div>(ลงชื่อ)....................................กรรมการ</div><div class="name"><?=h($committee[$i]['name']!==''?$committee[$i]['name']:'........................................')?></div><div><?=h($committee[$i]['position'])?></div></div><?php endforeach ?>
-              </div>
-            </div>
-            <div class="memo-page-footer">/ความเห็นของ…</div>
-          </section>
-          <section class="memo-sheet">
-            <div class="memo-sheet-header-number">-๒-</div>
-            <div class="memo-page-2-title" data-memo-output="first_opinion_title"><?=h($values['first_opinion_title'])?></div>
-            <div class="memo-opinion"><div class="memo-check"><span data-memo-check="first_decision:approved"><?= $values['first_decision']==='approved'?'☑':'☐' ?></span> เห็นชอบ</div><div class="memo-check"><span data-memo-check="first_decision:other"><?= $values['first_decision']==='other'?'☑':'☐' ?></span> อื่น ๆ <span data-memo-output="first_other" data-placeholder="........................................................"><?=h($values['first_other']!==''?$values['first_other']:'........................................................')?></span></div><div class="memo-opinion-signature">(<span data-memo-output="first_signer_name"><?=h($values['first_signer_name'])?></span>)<div data-memo-output="first_signer_position"><?=h($values['first_signer_position'])?></div></div></div>
-            <div class="memo-page-2-title" data-memo-output="second_opinion_title"><?=h($values['second_opinion_title'])?></div>
-            <div class="memo-opinion"><div class="memo-check"><span data-memo-check="second_decision:approved"><?= $values['second_decision']==='approved'?'☑':'☐' ?></span> อนุมัติ</div><div class="memo-check"><span data-memo-check="second_decision:rejected"><?= $values['second_decision']==='rejected'?'☑':'☐' ?></span> ไม่อนุมัติ</div><div class="memo-opinion-signature">(<span data-memo-output="second_signer_name"><?=h($values['second_signer_name'])?></span>)<div data-memo-output="second_signer_position"><?=h($values['second_signer_position'])?></div></div></div>
-          </section>
+          <?= committeeResultDocumentHtml($values, $memoNo, $docDate, $committee) ?>
         </div>
       </div>
     </section>
@@ -354,7 +422,7 @@ if (($_POST['action']??'')==='save_document') {
           </details>
           <div class="result-form-actions">
             <button type="submit" class="result-primary-button" <?= !$history?'disabled title="ต้องบันทึก TOR ขั้นตอนที่ 3 ก่อน"':'' ?>>บันทึกเอกสารหัวข้อ 4</button>
-            <div class="result-secondary-actions"><button type="button" class="result-action" id="result-view-preview">ดูตัวอย่าง</button><button type="button" class="result-action" onclick="window.print()">พิมพ์ / PDF</button></div>
+            <div class="result-secondary-actions"><button type="submit" name="action" value="word_document" class="result-action" <?= !$history?'disabled':'' ?>>ดาวน์โหลด Word</button><button type="button" class="result-action" onclick="window.print()">พิมพ์ / PDF</button></div>
             <p class="result-dirty-state" id="result-dirty-state" role="status" aria-live="polite"></p>
           </div>
         </form>
