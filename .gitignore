@@ -46,3 +46,8 @@ Thumbs.db
 /database/exports/
 /backups/
 /exports/
+
+# Runtime temporary files
+/storage/tmp/*
+!/storage/tmp/.gitkeep
+!/storage/tmp/.htaccess
