@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/core/config.php';
 require __DIR__ . '/core/procurement_case.php';
+require __DIR__ . '/core/meeting_tor_refresh.php';
 require __DIR__ . '/core/word_export_lib.php';
 require __DIR__ . '/core/auth.php';
 requireLogin();
@@ -104,6 +105,10 @@ function meetingStoredTotal(array $item): float
         return round((float) $item['offer_total'], 2);
     }
     return round(meetingItemOfferTotal($item), 2);
+}
+function meetingSelectedTotal(array $item, string $basis): float
+{
+    return $basis === 'reference' ? meetingTorReferenceTotal($item) : meetingStoredTotal($item);
 }
 function meetingBahtText(float $value): string
 {
@@ -599,10 +604,10 @@ function meetingReportDocumentPages(array $data, bool $forWord = false): string
                     <tr>
                         <td class="center"><?= thaiDigits($i + 1) ?>.</td>
                         <td><?= h((string) ($item['name'] ?? '')) ?></td>
-                        <td class="right"><?= meetingPriceText($item['offer_price'] ?? 0) ?><?php if (meetingItemHasPackage($item)): ?> (<?= quantityText($item['package_size']) ?> <?= h(meetingItemDisplayUnit($item)) ?>)<?php endif; ?></td>
+                        <td class="right"><?= meetingPriceText(meetingTorUnitPrice($item, $meetingPriceBasis)) ?><?php if (meetingItemHasPackage($item)): ?> (<?= quantityText($item['package_size']) ?> <?= h(meetingItemDisplayUnit($item)) ?>)<?php endif; ?></td>
                         <td class="center"><?= h(meetingItemDisplayUnit($item)) ?></td>
                         <td class="right"><?= quantityText(meetingItemDisplayQuantity($item)) ?></td>
-                        <td class="right"><?= money(meetingStoredTotal($item)) ?></td>
+                        <td class="right"><?= money(meetingSelectedTotal($item, $meetingPriceBasis)) ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <tr><td colspan="5"><strong>รวมเป็นเงิน</strong> -<?= h(meetingBahtText($offerTotal)) ?>-</td><td class="right"><strong><?= money($offerTotal) ?></strong></td></tr>
@@ -692,6 +697,8 @@ function splitCommittee($text, int $index): array
 }
 
 $error = '';
+$refreshRequested = (($_POST['action'] ?? '') === 'refresh_tor');
+$refreshApplied = false;
 $histories = [];
 $history = null;
 $caseId = (int) rawField('case_id', '0');
@@ -754,11 +761,55 @@ if ($caseId <= 0 && $history && !empty($history['case_id'])) {
     $savedTorExtra = is_array($savedTorDocument['extra'] ?? null) ? $savedTorDocument['extra'] : [];
 }
 
+// Read the TOR linked by the saved step 3 document, never another case/company.
+// For older cases without a link, use only the newest history in this exact case.
+if ($refreshRequested) {
+    try {
+        if (!$activeCase || $caseId <= 0) throw new RuntimeException('กรุณาเลือกชุดจัดซื้อก่อนดึงข้อมูล TOR');
+        $latestId = (int) ($savedTorExtra['history_id'] ?? 0);
+        if ($latestId > 0) {
+            $stmt = db()->prepare('SELECT * FROM tor_histories WHERE id = ? AND case_id = ?');
+            $stmt->execute([$latestId, $caseId]);
+        } else {
+            $stmt = db()->prepare('SELECT * FROM tor_histories WHERE case_id = ? ORDER BY created_at DESC, id DESC LIMIT 1');
+            $stmt->execute([$caseId]);
+        }
+        $latestHistory = $stmt->fetch() ?: null;
+        if (meetingTorRefreshItems($latestHistory, $caseId) === null) {
+            throw new RuntimeException('ไม่พบรายการ TOR ที่บันทึกล่าสุดของชุดนี้ หรือข้อมูลไม่สมบูรณ์ กรุณาตรวจหน้า TOR ก่อน');
+        }
+        $history = $latestHistory;
+        $historyId = (int) $history['id'];
+        if (!in_array($historyId, array_map(static fn(array $row): int => (int) $row['id'], $histories), true)) {
+            array_unshift($histories, $history);
+        }
+        $refreshApplied = true;
+        $error = '';
+    } catch (Throwable $refreshError) {
+        $error = $refreshError instanceof RuntimeException && !($refreshError instanceof PDOException)
+            ? $refreshError->getMessage() : 'ดึงข้อมูล TOR ไม่สำเร็จ กรุณาลองใหม่';
+    }
+}
+
 $committeeRaw = $history ? (json_decode((string) $history['committee_json'], true) ?: []) : [];
 if (!$committeeRaw && $activeCase) {
     $committeeRaw = $activeCase['committee'] ?? [];
 }
 $items = $history ? (json_decode((string) $history['items_json'], true) ?: []) : [];
+if (!is_array($items)) $items = [];
+// A saved meeting keeps its own item snapshot until the user explicitly refreshes.
+// A preview POST carries only source/hash, not client-supplied prices.
+$sameMeetingHistory = (int) ($savedMeetingExtra['history_id'] ?? 0) === $historyId;
+$hasSavedItems = $sameMeetingHistory && meetingTorUsableItems($savedMeetingExtra['items'] ?? null);
+$postedItemsSource = (string) ($_POST['meeting_items_source'] ?? '');
+$postedItemsHash = (string) ($_POST['meeting_items_hash'] ?? '');
+$itemsSource = $hasSavedItems && !$refreshApplied && $postedItemsSource !== 'tor' ? 'saved' : 'tor';
+if ($itemsSource === 'saved') $items = $savedMeetingExtra['items'];
+$meetingPriceBasis = meetingTorPriceBasis($itemsSource, $savedMeetingExtra, $savedTorExtra, $historyId);
+$itemsHash = meetingTorFingerprint($caseId, $historyId, $itemsSource, itemSnapshot($items), $itemsSource === 'tor' ? (int) ($savedTorExtra['history_id'] ?? 0) : 0, $meetingPriceBasis);
+$itemsStale = !$refreshRequested && in_array(($_POST['action'] ?? ''), ['save_document', 'word'], true)
+    && $postedItemsHash !== '' && !hash_equals($itemsHash, $postedItemsHash);
+if ($itemsStale) $error = 'ข้อมูล TOR หรือรายงานที่บันทึกเปลี่ยนไประหว่างตรวจสอบ กรุณากดดึงข้อมูล TOR ล่าสุดอีกครั้งหรือตรวจรายการที่แสดงใหม่ก่อนบันทึก';
 $hasSelectedHistory = $historyId > 0 && $history !== null;
 $committee = [
     splitCommittee($committeeRaw[0] ?? '', 0),
@@ -768,11 +819,12 @@ $committee = [
 
 $defaultPurposeLine = 'เพื่อจัดหาการจัดซื้อยา จำนวน ' . thaiDigits((string) count($items)) . ' รายการ';
 $savedPurposeLine = savedValue($savedMeetingExtra, 'purpose_line', $defaultPurposeLine);
-if ((int) ($savedMeetingExtra['history_id'] ?? 0) !== $historyId || (count($items) > 0 && str_contains($savedPurposeLine, 'จำนวน ๐ รายการ'))) {
+if ((!$refreshApplied && (int) ($savedMeetingExtra['history_id'] ?? 0) !== $historyId) || (count($items) > 0 && str_contains($savedPurposeLine, 'จำนวน ๐ รายการ'))) {
     $savedPurposeLine = $defaultPurposeLine;
 }
 $meetingTitle = field('meeting_title', savedValue($savedMeetingExtra, 'meeting_title', 'รายงานการประชุมคณะกรรมการกำหนดรายละเอียดคุณลักษณะเฉพาะและกำหนดราคากลาง'));
 $purposeLine = field('purpose_line', $savedPurposeLine);
+if ($refreshApplied) $purposeLine = meetingTorUpdateCount($purposeLine, thaiDigits(count($items)));
 // ปีงบประมาณใช้ข้อมูลกลางของชุดเอกสาร; ไม่เปลี่ยนปีของวันที่ประชุม
 $caseFiscalYear = trim((string) ($activeCase['fiscal_year'] ?? ''));
 $fiscalLine = $caseFiscalYear !== ''
@@ -785,7 +837,7 @@ $openTime = field('open_time', savedValue($savedMeetingExtra, 'open_time', saved
 $closeTime = field('close_time', savedValue($savedMeetingExtra, 'close_time', '๑๑.๐๐ น.'));
 $absentText = field('absent_text', savedValue($savedMeetingExtra, 'absent_text', 'ไม่มี'));
 
-if ((int) ($savedMeetingExtra['history_id'] ?? 0) === $historyId && is_array($savedMeetingExtra['committee'] ?? null)) {
+if (($sameMeetingHistory || $refreshApplied) && is_array($savedMeetingExtra['committee'] ?? null)) {
     foreach ($savedMeetingExtra['committee'] as $i => $savedPerson) {
         if (isset($committee[$i]) && is_array($savedPerson)) {
             $committee[$i] = array_merge($committee[$i], array_intersect_key($savedPerson, $committee[$i]));
@@ -886,7 +938,7 @@ $activeTemplateRevision = $isTemplatePreview ? $templateRevision : ($postedTempl
 $hasAdoptedTemplate = $hasSameSavedHistory && $savedTemplateRevision === $templateRevision;
 $postedSpeakers = $_POST['speech_speaker'] ?? null;
 $savedSpeeches = is_array($savedMeetingExtra['speeches'] ?? null) ? $savedMeetingExtra['speeches'] : [];
-if (!$hasSameSavedHistory || $isTemplatePreview) {
+if ((!$hasSameSavedHistory && !$refreshApplied) || $isTemplatePreview) {
     $savedSpeeches = [];
 }
 if ($savedSpeeches && count($items) > 0) {
@@ -914,6 +966,12 @@ if (is_array($postedSpeakers)) {
     }
 }
 if (!$speeches) $speeches = $savedSpeeches ?: $defaultSpeeches;
+if ($refreshApplied) {
+    foreach ($speeches as &$speech) {
+        $speech['content'] = meetingTorUpdateCount((string) ($speech['content'] ?? ''), $itemCountText);
+    }
+    unset($speech);
+}
 // Older documents may have saved the new wording before revision tracking existed.
 // Compare the actual speaking roles and content, not incidental 'topic' keys.
 $sameAsCurrentTemplate = count($savedSpeeches) === count($defaultSpeeches);
@@ -950,7 +1008,7 @@ foreach ($speeches as $speech) {
     $speechesByAgenda[$agenda][] = $speech;
 }
 
-$offerTotal = array_sum(array_map('meetingStoredTotal', $items));
+$offerTotal = array_sum(array_map(static fn(array $item): float => meetingSelectedTotal($item, $meetingPriceBasis), $items));
 $meetingProjectName = 'จัดซื้อยาที่องค์การเภสัชกรรมมิได้ผลิตจำหน่าย จำนวน ' . $itemCountText . ' รายการ';
 // Annexes 1 and 2 start with the number/date saved in step 4.
 // If a user has explicitly changed either field in this document, keep that override.
@@ -983,7 +1041,9 @@ foreach ($items as $i => $item) {
     }
 }
 if (($_POST['action'] ?? '') === 'save_document') {
-    if ($caseId <= 0 || !$activeCase) {
+    if ($itemsStale) {
+        // Keep form edits for review; do not write the document.
+    } elseif ($caseId <= 0 || !$activeCase) {
         $error = 'กรุณาเลือกชุดข้อมูลจาก TOR ก่อนบันทึก';
     } elseif ($historyId <= 0 || !$history) {
         $error = 'กรุณาเลือกข้อมูล TOR จากหัวข้อ 1 ก่อนบันทึก';
@@ -1005,6 +1065,7 @@ if (($_POST['action'] ?? '') === 'save_document') {
             'absent_text' => $absentText,
             'committee' => $committee,
             'items' => itemSnapshot($items),
+            'price_basis' => $meetingPriceBasis,
             'references' => $referenceDocuments,
             'speeches' => $speeches,
             'template_revision' => $activeTemplateRevision === $templateRevision ? $templateRevision : '',
@@ -1031,6 +1092,7 @@ $meetingDocumentData = [
     'items' => $items,
     'itemCountText' => $itemCountText,
     'offerTotal' => $offerTotal,
+    'meetingPriceBasis' => $meetingPriceBasis,
     'agendaOrder' => $agendaOrder,
     'agendaTitles' => $agendaTitles,
     'speechesByAgenda' => $speechesByAgenda,
@@ -1039,6 +1101,11 @@ $meetingDocumentData = [
     'reportMemoNo' => $reportMemoNo,
     'reportDocDate' => $reportDocDate,
 ];
+if (($_POST['action'] ?? '') === 'word' && $itemsStale) {
+    http_response_code(409);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit($error);
+}
 if (($_POST['action'] ?? '') === 'word') {
     $meetingWordHtml = meetingReportWordHtml($meetingDocumentData);
     try {
@@ -1263,12 +1330,21 @@ $timeFields = [
         <?php if ($error): ?>
             <div class="mb-4 rounded-md border border-red-500/40 bg-red-950/60 p-3 text-sm text-red-100"><?= h($error) ?></div>
         <?php endif; ?>
+        <?php if ($refreshApplied): ?>
+            <div class="mb-3 rounded-md border border-emerald-500/50 p-3 text-sm" role="status">
+                ดึงรายการยาและราคาจาก TOR ล่าสุดแล้ว <?= h(thaiDigits(count($items))) ?> รายการ (ยังไม่บันทึก)
+                <p class="mt-1 font-medium">ฐานราคา: <?= $meetingPriceBasis === 'reference' ? 'ราคากลาง' : 'ราคาเสนอ' ?> × จำนวน · ยอดรวม <?= h(money($offerTotal)) ?> บาท</p>
+                <p class="mt-1 text-xs">ตรวจตัวอย่างด้านซ้าย รวมถึงยอดเงินและข้อความประชุม แล้วกดบันทึกเอกสารด้วยตนเอง (ข้อความรายการ/ราคาที่พิมพ์เองจะไม่ถูกเขียนทับ)</p>
+            </div>
+        <?php elseif ($savedDocument && $hasSavedItems && $itemsSource === 'saved'): ?>
+            <p class="mb-3 text-xs text-zinc-400">กำลังแสดงรายการและราคาที่บันทึกในรายงานประชุม (<?= $meetingPriceBasis === 'reference' ? 'ราคากลาง' : 'ราคาเสนอ' ?>) หากแก้ TOR ภายหลัง ให้กดดึงข้อมูลใหม่</p>
+        <?php endif; ?>
         <?php foreach ($meetingPriceWarnings as $priceWarning): ?>
             <div class="mb-2 rounded-md border border-amber-500/40 bg-amber-950/40 p-3 text-sm text-amber-100"><?= h($priceWarning) ?></div>
         <?php endforeach; ?>
         <?php if (($_GET['saved'] ?? '') === '1' && $caseId > 0): ?>
             <div class="mb-4 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">
-                บันทึกเอกสารหัวข้อ 4 เรียบร้อยแล้ว
+                บันทึกรายงานการประชุมเรียบร้อยแล้ว
             </div>
         <?php endif; ?>
         <form method="get" action="meeting_report.php" class="mb-4 rounded-md border border-zinc-800 p-3">
@@ -1288,16 +1364,20 @@ $timeFields = [
                     </select>
                 </label>
                 <p class="mt-2 text-xs text-zinc-500">เลือกประวัติ TOR เพื่อดึงรายชื่อกรรมการและรายการยามาใช้ในรายงานการประชุม</p>
+                <button type="submit" form="meeting_report_form" name="action" value="refresh_tor" <?= !$activeCase ? 'disabled' : '' ?> class="mt-2 rounded-md border border-emerald-500/60 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-50">ดึงรายการยาและราคา TOR ล่าสุด</button>
+                <p class="mt-1 text-xs text-zinc-500">ดึงเฉพาะชุดจัดซื้อนี้ ไม่บันทึกอัตโนมัติ ข้อความที่พิมพ์เองยังอยู่ กรุณาตรวจจำนวนและราคาก่อนบันทึก</p>
                 <?php if ($showNewTemplateLink): ?>
                 <a class="mt-2 inline-block rounded border border-amber-500/50 px-3 py-2 text-xs text-amber-200" href="meeting_report.php?case_id=<?= (int) $caseId ?>&amp;history_id=<?= (int) $historyId ?>&amp;use_template=1">แสดงข้อความต้นแบบใหม่ (ยังไม่ทับข้อมูลที่บันทึก)</a>
                 <?php endif; ?>
         </form>
 
-        <form id="meeting_report_form" method="post" class="grid gap-4">
+        <form id="meeting_report_form" method="post" action="meeting_report.php" class="grid gap-4">
             <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
             <input type="hidden" name="case_id" value="<?= (int) $caseId ?>">
             <input type="hidden" name="history_id" value="<?= (int) $historyId ?>">
             <input type="hidden" name="template_revision" value="<?= h($activeTemplateRevision) ?>">
+            <input type="hidden" name="meeting_items_source" value="<?= h($itemsSource) ?>">
+            <input type="hidden" name="meeting_items_hash" value="<?= h($itemsHash) ?>">
             <section class="rounded-md border border-zinc-800">
                 <button type="button" class="accordion-toggle flex w-full items-center justify-between gap-3 p-3 text-left text-sm font-medium text-zinc-100" aria-expanded="true">
                     <span>2. หัวเอกสารและปีงบประมาณ</span>
@@ -1401,7 +1481,7 @@ $timeFields = [
                 </div>
             </section>
 
-            <button type="submit" name="action" value="save_document" class="app-primary-save rounded-md border border-emerald-500/60 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/10">บันทึกเอกสารหัวข้อ 4</button>
+            <button type="submit" name="action" value="save_document" class="app-primary-save rounded-md border border-emerald-500/60 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/10">บันทึกรายงานการประชุม</button>
         </form>
     </aside>
 

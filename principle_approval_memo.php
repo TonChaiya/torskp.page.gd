@@ -859,6 +859,15 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
         }
     </style>
 <link rel="stylesheet" href="assets/document-workspace.css?v=20261124-1">
+<style>
+/* Form only: full-width search even on a wide screen with a narrow editor pane. */
+.principle-medicine-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:.5rem; align-items:end; }
+.principle-medicine-fields > * { min-width:0; }
+.principle-medicine-fields > .principle-medicine-name { grid-column:1/-1; }
+.principle-medicine-name .medicine-results { width:100%; max-height:13rem; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+.principle-medicine-name .medicine-choice { white-space:normal; overflow-wrap:anywhere; word-break:normal; }
+.principle-medicine-name .medicine-search { min-width:0; width:100%; }
+</style>
 </head>
 <body class="docws docws-principle-page min-h-screen bg-zinc-950 text-zinc-100">
 <?php require __DIR__ . '/components/navbar.php'; ?>
@@ -959,8 +968,8 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
                     <?php foreach ($defaultItems as $i => $item): ?>
                         <div class="medicine-row rounded-md border border-zinc-800 bg-zinc-950 p-3">
                             <div class="mb-2 text-xs font-medium text-emerald-300">รายการที่ <span class="medicine-row-number"><?= thaiDigits((string) ($i + 1)) ?></span></div>
-                            <div class="grid gap-2 xl:grid-cols-[minmax(0,1fr)_5.5rem_6rem_auto] xl:items-end">
-                                <label class="block min-w-0">
+                            <div class="principle-medicine-fields">
+                                <label class="block min-w-0 principle-medicine-name">
                                     <span class="text-xs text-zinc-400">ชื่อยา</span>
                                     <input type="hidden" name="medicine_id[]" class="medicine-id" value="<?= h((string)($item['selection_key'] ?? $item['medicine_id'])) ?>">
                                     <input type="text" name="medicine_name[]" class="medicine-search mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-emerald-400" value="<?= h($item['name']) ?>" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
@@ -1709,7 +1718,15 @@ function setActiveMedicineChoice(row, index) {
         choice.classList.toggle('bg-emerald-500/20', active);
         choice.classList.toggle('text-emerald-100', active);
         choice.setAttribute('aria-selected', active ? 'true' : 'false');
-        if (active) choice.scrollIntoView({ block: 'nearest' });
+        if (active) {
+            const list = choice.closest('.medicine-results');
+            if (list) {
+                const bounds = list.getBoundingClientRect();
+                const option = choice.getBoundingClientRect();
+                if (option.top < bounds.top) list.scrollTop -= bounds.top - option.top;
+                else if (option.bottom > bounds.bottom) list.scrollTop += option.bottom - bounds.bottom;
+            }
+        }
     });
     row.dataset.activeMedicineIndex = choices.length ? String(index) : '-1';
 }
@@ -1793,8 +1810,8 @@ function addMedicineRow(medicine = null) {
     wrapper.className = 'medicine-row rounded-md border border-zinc-800 bg-zinc-950 p-3';
     wrapper.innerHTML = `
         <div class="mb-2 text-xs font-medium text-emerald-300">รายการที่ <span class="medicine-row-number"></span></div>
-        <div class="grid gap-2 xl:grid-cols-[minmax(0,1fr)_5.5rem_6rem_auto] xl:items-end">
-            <label class="block min-w-0">
+        <div class="principle-medicine-fields">
+            <label class="block min-w-0 principle-medicine-name">
                 <span class="text-xs text-zinc-400">ชื่อยา</span>
                 <input type="hidden" name="medicine_id[]" class="medicine-id" value="${escapeHtml(item.id || '')}">
                 <input type="text" name="medicine_name[]" class="medicine-search mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-emerald-400" value="${escapeHtml(item.name || '')}" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
