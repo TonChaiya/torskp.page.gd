@@ -52,3 +52,7 @@ git push origin main
 ## Database baseline และ staged safety
 
 ใช้ `database/schema.sql` เฉพาะฐานใหม่ว่าง; read-only checks ก่อนแก้ฐานเดิม. ห้ามรัน migration เดิมทั้งหมดหลัง import schema. ตรวจ `git ls-files -- "*.sql"` และ staged file list; commit เฉพาะ schema/migrations/checks ที่ไม่มีข้อมูลจริง. ดู [DATABASE_BACKUP.md](DATABASE_BACKUP.md).
+
+## Import v1.2.0 candidate QA
+
+`php tests/catalog_import_test.php` ใช้ fake PDO และไฟล์สมมุติใน system temp เท่านั้น ไม่แตะ DB จริง; หากเปิด extensions XLSX จะเพิ่มการตรวจ sparse cell/shared strings/formula. ต้องทำ manual UAT ตาม [IMPORT_SYSTEM.md](IMPORT_SYSTEM.md) กับ MySQL Dev แยก/สำรองก่อน, ตรวจ PHP limits และ storage access. ไม่อัปโหลด tests/ ไป web root จริง. ไม่ต้อง migrate ฐาน v1.1.0 ที่ตรง schema. ห้ามอ้าง performance mock เป็น performance hosting.

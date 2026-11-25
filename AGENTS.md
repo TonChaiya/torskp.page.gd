@@ -31,3 +31,16 @@
 ## ข้อควรระวัง ณ baseline
 
 `schema.sql` ใหม่เป็นโครงสร้าง Dev 24 พ.ย. 2569 ครบ 12 ตาราง; ใช้เฉพาะฐานใหม่ว่าง. ฐานเดิมต้องตรวจ read-only gate ก่อน, ไม่รัน migration เก่าซ้ำ. Legacy CHECK document_type อาจไม่รวมรายงานผล; Dev ไม่มี CHECK ดังกล่าว. ห้ามถอดหรือเพิ่ม constraints ของฐานเดิมโดยพลการ. อ่าน `docs/DATABASE_BACKUP.md`; full dump ห้ามอยู่ Git/web root และการล้าง history ต้องได้รับอนุมัติ. อ่าน `docs/DATABASE.md` ก่อนติดตั้งใหม่หรือเปลี่ยน DB. ห้ามแก้ปัญหาด้วยการลบฐานหรือปิด constraint ทั้งหมด. สถานะที่ผู้ใช้ตรวจผ่าน Word รวม V4 เป็นการรับรองของผู้ใช้ในสภาพแวดล้อมของเขา ไม่ใช่หลักฐานว่าเอกสารใหม่ทุกชนิดผ่านแล้ว.
+
+## Import v1.2.0 — กฎบังคับ (candidate 25 พ.ย. 2569)
+
+อ่าน [docs/IMPORT_SYSTEM.md](docs/IMPORT_SYSTEM.md) ก่อนแก้ Import. แยก `medicines` (คุณลักษณะ) และ `medicine_price_references` (ราคา) ตลอดเส้นทาง; ห้าม map/merge ตารางหรือแก้ ID เดิมโดยพลการ. Excel ยาใช้ 3 คอลัมน์และข้อความหลายบรรทัดใน `specification` TEXT; ห้าม collapse บรรทัด. ใช้ preview แบบ read-only ก่อน confirm ทุกครั้ง; error/duplicate/conflict ต้อง block ทั้งงาน, warning ต้องรับทราบ. Replace ใช้เฉพาะราคากลางและต้องยืนยันจำนวนที่จะนำออก, ห้าม TRUNCATE/DDL ในเส้นทาง import, ใช้ InnoDB transaction และตรวจ fingerprint ภายใต้ lock. ห้ามเปิด route import เดิมให้ bypass Preview. ไม่เก็บไฟล์ staging ใน Git หรือเปิดผ่าน HTTP. ไม่มี migration ในรอบนี้. ต้องทดสอบ MySQL/XLSX จริงบน Dev ก่อน Production; fake PDO/Chromium mock ไม่ใช่ผลทดสอบฐานจริง.
+
+### Import UI guard
+รักษา toolbar เหนือตารางและ Popup ทั้งสองประเภท; ห้ามย้ายฟอร์มกลับไปต่อท้ายรายการ. `templates/import/` มี template แยกประเภท, ชีตแรก Import ว่างพร้อม header; ตัวอย่างและคู่มืออยู่ชีตถัดไป. ห้าม import ชีตตัวอย่างอัตโนมัติ. ปิด Popup ขณะงาน busy ไม่ได้; เมื่อยกเลิกต้องเรียก cancel staging และไม่อ้าง rollback หากผล commit ไม่แน่นอน.
+
+การล้างราคากลางประจำปี: แยก action `clear_price_refs` ออกจาก Import/รายการยา; Admin POST + CSRF + คำยืนยัน + รับทราบ backup + count/hash ล่าสุดภายใต้ lock. ลบเฉพาะ `medicine_price_references` ใน transaction, ไม่ TRUNCATE/ไม่ reset ID. ห้ามเปิดทางล้างโดย GET หรือ bypass confirmation. ห้ามลบเอกสาร/คุณลักษณะยา. อ่าน IMPORT_SYSTEM.md ก่อนแก้ไข.
+
+
+## ข้อกำหนดเพิ่มเติม: ล้างคลังรายการยา
+ห้ามทำให้ปุ่มล้างรายการยาเป็น TRUNCATE หรือ bypass guard เอกสารเดิม: TOR ยังอ้างอิง ID live medicines แม้ history เก็บข้อความ snapshot บางส่วน. ล้างได้เฉพาะเมื่อไม่มีชุดจัดซื้อ/เอกสารที่บันทึกไว้ทั้งสี่ตารางที่ตรวจ และต้องมี backup acknowledgement/snapshot/transaction. หากมีเอกสารให้ใช้ import merge รักษา ID เดิม; งานรองรับล้างคลังพร้อมรักษาประวัติทุกกรณีต้องวิเคราะห์และขออนุมัติแยก. ส่งออก Excel 3 คอลัมน์เป็นข้อมูลคลังเท่านั้น ไม่ใช่ backup ฐานข้อมูล. อ่าน docs/IMPORT_SYSTEM.md.

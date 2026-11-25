@@ -32,3 +32,27 @@
 - อ้างอิง Dev export 24 พ.ย. 2569; structure-only 12 ตาราง, 100 คอลัมน์, migration supplier และ read-only checks. ไม่มีข้อมูลจริง/DDL บนฐานเดิม; ไม่เปลี่ยน PHP/UI/Word.
 - เพิ่มกฎ ignore SQL dumps/archive และคู่มือ backup/untrack; ผู้ใช้ต้องสำรองและ untrack เอง. Git history cleanup ยังไม่ดำเนินการ.
 - Docs handoff ก่อนงานนี้อยู่ commit `6c6ed8e0`; งาน DB นี้ยังรอ commit และทดสอบ import DB จริง. เสนอ commit `chore(db): sync v1.1.0 schema and protect private backups`.
+
+## v1.2.0 — Import & Data Quality (candidate; ยังไม่ Push/รับรอง Production)
+
+- Baseline Git `c923372cf8b10eab12be5152b3d7446036ae807e` (v1.1.0 หลัง DB baseline, 25 พ.ย. 2569).
+- แยก reader, medicine/price validation, staging/confirm ออกจาก admin.php; รองรับ CSV UTF-8 multiline และ XLSX sheet1 แบบ streaming, strict header/price/length. Preview แยกสถานะ, ค้นหา, 25/50/100 ต่อหน้า, เปรียบเทียบข้อมูลก่อน–หลัง, CSV รายงานข้อผิดพลาด, cancel/confirm.
+- ยืนยันก่อนบันทึก, ตรวจ snapshot, batch SQL ภายใต้ InnoDB transaction; replace ราคาเท่านั้น ลบเฉพาะรายการที่ไม่มีในไฟล์ใหม่ รักษา ID รายการที่ตรงกัน. ไม่มี migration/เปลี่ยน schema หรือแก้ TOR/Word V4.
+- ตรวจ PHP lint, JS syntax, CSV + fake PDO 52 assertions (ราคา 234–50,000 แถว, ยา 234/10,000 แถว), Chromium offline UI mock ผ่าน. ยังไม่ได้รันจริง MySQL/MariaDB, XLSX extensions, Laragon/Word/Hosting; ดู UAT ใน docs/IMPORT_SYSTEM.md. ปิด Production gate จนผู้ใช้ทดสอบ.
+- Candidate UI follow-up: ย้ายปุ่มเพิ่ม/แก้ไข/Import ทั้งสองประเภทไป Popup; toolbar เหนือตาราง, scroll ภายใน, ป้องกันปิดขณะ busy, cancel staging ก่อนปิด. เพิ่ม Excel Template แยกข้อมูลจริง/ตัวอย่าง/คู่มือ, ปรับ reader ให้รองรับ namespace prefix ของ SpreadsheetML. ไม่มี migration หรือเปลี่ยน logic transaction. ยังรอ XLSX/MySQL UAT.
+
+- Candidate annual price reset: เพิ่มปุ่มล้างราคากลางทั้งหมดพร้อม Popup ยืนยันจำนวนจริง, backup acknowledgement และคำยืนยัน; ตรวจ snapshot ภายใต้ transaction, rollback เมื่อผิดพลาด, ไม่ reset ID และไม่แก้ตารางรายการยา. โหมด replace Import เดิมยังอยู่. ทดสอบ fake PDO 65 assertions; รอ UAT MySQL/XLSX จริง.
+
+- Candidate hotfix (25 พ.ย. 2569): แก้ Popup POST 404 `[object HTMLInputElement]` จาก hidden input `name="action"` บัง `HTMLFormElement.action`; อ่าน/เขียน HTML attribute ผ่าน getAttribute/setAttribute และเพิ่ม cache version admin-modal.js เป็น 1204. ทดสอบ submit event ใน Chromium แบบ offline (จับ URL/FormData ก่อน network) ครบ 5 กรณี clear/add/edit ของทั้งสองหมวด; fake PDO 65 assertions ผ่าน. ไม่แก้ DB/Import transaction. รอ UAT Laragon จริง.
+
+- Candidate hotfix (25 พ.ย. 2569): รองรับราคากลางจาก Excel ที่มี LF ในชื่อ/ความแรง/หน่วยโดยรักษาคีย์เดิม และทศนิยมเกิน 4 ตำแหน่งโดยปัดเศษแบบ decimal string พร้อม warning ก่อนยืนยัน. ชุดข้อมูลจริง 2,520 แถว ผ่าน validation จาก XML ที่สกัดเป็น CSV และ fake PDO (272 warning, 0 blocked); regression 84 assertions. รอ UAT XLSX/MySQL บน Laragon. ไม่แก้ schema/ข้อมูลเดิม/ไฟล์ Excel ต้นฉบับ.
+
+### v1.2.0 — XLSX reader / header diagnostic hotfix (Dev)
+- เปลี่ยนตัวอ่าน XLSX ให้ใช้ XMLReader อ่านแถว เซลล์ แอตทริบิวต์ และ shared/inline rich text โดยตรง รองรับ default/prefixed namespace โดยไม่ต้องใช้ SimpleXML. เพิ่มข้อความแจ้งหัวคอลัมน์ที่อ่านได้จริงและเลขแถวเมื่อไม่ตรงประเภท. คงการตรวจชนิดไฟล์ สูตร ขนาด และการ Preview/Confirm/Rollback เดิม.
+- ไฟล์ราคากลางผู้ใช้ 2,520 แถว: CSV ตรงต้นฉบับและผ่าน fake PDO 88 assertions รวม fixture จริง; ทดสอบตัวอ่านใหม่กับ XML จริงผ่าน adapter libxml2/PharData ได้ข้อมูลตรง CSV ทั้ง 2,521 แถวรวม header และ template ทั้งสองผ่าน. ยังไม่ใช่การทดสอบ native PHP XMLReader/ZipArchive หรือ MySQL บน Laragon. ไม่มี migration. ไฟล์ราคาจริง CSV เป็นไฟล์แยกสำหรับผู้ใช้ ไม่บรรจุใน ZIP หรือ Git.
+
+
+### v1.2.0 — ส่งออกและล้างคลังรายการยา (Dev)
+- เพิ่มปุ่มส่งออก Excel ทั้งคลัง `medicines` ไม่จำกัดผลค้นหา/การแบ่งหน้า: ชีต Import, 3 คอลัมน์, ข้อความหลายบรรทัด, freeze header, wrap text, filter, text cell ไม่ใช่สูตร; ไม่มีข้อมูลราคากลาง.
+- เพิ่ม Popup ล้างรายการยาแยกจากราคากลาง: snapshot, จำนวนจริง, รับทราบสำรองข้อมูล, คำยืนยัน `ล้างรายการยา`, ตรวจซ้ำฝั่ง Server, DELETE แบบ batch/transaction ไม่ TRUNCATE. ปิดการล้างถ้ามีชุดจัดซื้อหรือเอกสารใดในสี่ตารางที่เกี่ยวข้อง เพราะหน้า TOR ยังต้องใช้ ID จากคลังเดิม. ใช้ import merge แทนเมื่อมีเอกสารเก่า.
+- ทดสอบ fake PDO/CSV 116 assertions (รวม fixture ราคากลางเดิม 2,520 แถว), ตรวจแพ็กเกจ XLSX 234 แถวจำลองผ่าน PharData adapter และ XML, Chromium offline/mock API ผ่านทั้งสอง Popup. ยังไม่ทดสอบ native ZipArchive, MySQL หรือ Microsoft Excel บน Dev จริง. ไม่แก้ schema, Word Merge, เอกสารทั้งหกขั้นตอน หรือค่าข้อมูลจริง.

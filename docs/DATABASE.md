@@ -102,3 +102,13 @@ ALTER TABLE procurement_documents
 - `database/checks/v1.1.0_schema_check.sql`: DB/version, missing 100 required columns, รายการ actual type/default, indexes, constraints; อ่าน metadata ได้แม้ตารางขาด.
 - `database/checks/v1.1.0_integrity_check.sql`: รันเมื่อ schema gate ครบเท่านั้น; จำนวน rows, duplicate/orphan, JSON validity, TOR history link, status/price; ไม่แสดงค่า JSON/ชื่อ/IP/hash จริง.
 - เปรียบเทียบจำนวน rows ก่อน/หลัง migration บน copy; ไม่ใช้ row counts เป็นหลักฐานความครบถ้วนเพียงอย่างเดียว. Backup แบบ full data เก็บแยก; ทดสอบ restore ก่อน deploy.
+
+## Import v1.2.0 candidate
+
+ไม่มี migration เพิ่ม; ใช้ `medicines` unique(name) และ `medicine_price_references` unique(medicine_name,dosage_form_strength,unit), collation utf8mb4_unicode_ci, InnoDB. Preview ไม่เขียนตารางจริง. Confirm ตรวจ fingerprint และล็อก target table range ใน transaction (REPEATABLE READ); บันทึกหลายแถวต่อ statement และ rollback เมื่อเกิด exception ก่อน commit. Replace ราคาใช้ DELETE เฉพาะ ID ที่ไม่อยู่ในชุดใหม่ ไม่ใช้ TRUNCATE และไม่ reset AUTO_INCREMENT. ห้ามแก้ schema ให้ผ่าน validation โดยพลการ. ดู [IMPORT_SYSTEM.md](IMPORT_SYSTEM.md) และทดสอบบนฐาน Dev จริงก่อนขึ้น Hosting.
+
+การล้างราคากลางประจำปีจาก Admin เป็นคำสั่ง DELETE เฉพาะ `medicine_price_references` หลังรับทราบ backup/คำยืนยัน และตรวจ count/hash ภายใต้ lock; transaction เดียว ไม่ TRUNCATE ไม่ reset ID ไม่แก้ schema. หากพบ inbound FK จะไม่ล้าง. การล้างไม่ใช่ migration; ห้ามใช้กับตาราง medicines หรือเอกสาร.
+
+
+### การล้างคลัง `medicines` ใน v1.2.0
+ไม่เปลี่ยน schema: ใช้ `core/medicine_catalog_tools.php` ตรวจ snapshot และ block การล้างเมื่อมีข้อมูลใน procurement_cases, procurement_documents, tor_histories หรือ scope_price_approval_memos เนื่องจากฟอร์ม TOR ยังอ้างอิง ID ใน `medicines`. ไม่ลบตารางเอกสาร ไม่ reset AUTO_INCREMENT และไม่แตะ `medicine_price_references`. หากมีเอกสารเดิมให้ใช้ import merge; Excel export ไม่เก็บ ID จึงไม่ใช่ตัวแทน full SQL backup. ทำการล้างเฉพาะฐานใหม่ที่ยังไม่มีเอกสาร และไม่มีฟอร์ม/ผู้ใช้ทำรายการค้าง.

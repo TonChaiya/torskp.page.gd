@@ -35,3 +35,15 @@
 - ตรวจ Git HEAD `6c6ed8e01bc78049a4a264c696dca6665a2e5022`, Dev SQL dump MySQL 8.4.3; 12 tables, 100 columns, ไม่มี orphan/invalid JSON จากการตรวจ offline. สร้าง schema structure-only และ read-only checks. ฐาน Dev ไม่ต้อง migrate.
 - ไม่มีการแก้ฐานเดิมหรือ PHP/JS/CSS. Fresh install/restore ยังไม่ได้ทดสอบกับ engine จริง.
 - .gitignore ป้องกัน dump ใหม่; owner ต้องย้าย backup และ git rm --cached ตาม DATABASE_BACKUP. ไม่ได้ลบข้อมูลหรือประวัติ Git. Hardening constraints ที่ไม่ตรง Dev เป็นงานแยก.
+
+## Update 25 พ.ย. 2569 — Import v1.2.0 candidate
+
+- Git HEAD ก่อนงาน `c923372cf8b10eab12be5152b3d7446036ae807e`; DB baseline และเอกสารครบ, dump 2 ไฟล์ถูกเอาออกจาก HEAD (ยังอยู่ใน history; repo public ณ การตรวจก่อนหน้า). schema v1.1.0 คงเดิม.
+- Phase 1–4: implementation ส่งมอบสำหรับ Dev; reader, medicine/price logic, staging, preview UI, confirm transaction. ไม่มีการแก้ระบบอื่น. Phase 5: PHP lint/JS syntax, CSV + fake PDO 52 assertions, Chromium offline mock ผ่าน; **ยังไม่ผ่าน full release gate** เพราะเครื่องทดสอบไม่มี MySQL/PDO MySQL/XMLReader/ZipArchive/SimpleXML. ไม่ได้ทดสอบ Word จริงหรือ Hosting.
+- ให้ผู้ใช้ทำ UAT จาก [IMPORT_SYSTEM.md](IMPORT_SYSTEM.md) บนฐาน Dev ที่สำรองแล้ว โดยเฉพาะการจับคู่ collation, XLSX multiline, rollback/replace, stale preview, TOR/Word/PDF/Merge V4. อย่า deploy ก่อนยืนยัน. ไม่ได้ Push เอง. หมายเลข v1.2.0 เป็นเป้าหมาย release หลัง UAT.
+
+### Candidate UI follow-up (25 พ.ย. 2569)
+เพิ่ม Popup แยกเพิ่ม/แก้ไข/Import ของรายการยาและราคากลาง พร้อม Excel Template สองไฟล์ใน templates/import. คง schema, transaction, ขั้นตอน Preview และระบบเอกสาร. ตรวจ lint, CSV/fake PDO 52 assertions; XLSX namespace/ตัว template มี optional tests ที่ต้องรันบน Laragon. Production gate ยังไม่ผ่าน.
+
+### Candidate annual price reset
+เพิ่มปุ่มล้างราคากลางทั้งหมดเฉพาะ Admin; ตรวจ count/hash และคำยืนยันก่อน DELETE แบบ transaction. ไม่เปลี่ยน schema/เอกสาร. Fake PDO 65 assertions ผ่าน, MySQL/XLSX และ Production gate ยังรอ UAT.

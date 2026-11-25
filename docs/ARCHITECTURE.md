@@ -68,3 +68,12 @@ flowchart TD
 - เปลี่ยน Word รูปแบบ → หน้าเฉพาะ + word_export_lib หรือ scope template + merge code + print CSS
 - เปลี่ยนบัญชี → auth/login/register/change_password + migration; admin ไม่ใช่ account hub
 - เปลี่ยน UI → หน้าและ shared CSS/JS เฉพาะงาน; ห้ามแก้ print CSS โดยไม่ตั้งใจ
+
+## Import v1.2.0 candidate — เฉพาะหลังบ้าน
+
+`admin.php` ยังคง requireAdmin, CSRF และ CRUD/live search เดิม. แทนเส้นทาง import โดย action `import_v2_*` ผ่าน `core/catalog_import.php` (staging, preview, fingerprint, confirm). `core/spreadsheet_import.php` เป็นตัวอ่าน CSV/XLSX และสร้างตัวอย่าง; `core/medicine_import.php` / `core/price_reference_import.php` แยก validation และ decision. `components/catalog_import_panel.php` เป็นฟอร์มสองชุดและ Preview; `assets/admin-import.js` / `.css` จัด UI แบบ scoped. ไฟล์ชั่วคราวอยู่ storage/tmp ที่มี access protection; ไม่มีตารางถาวรเพิ่ม. อ่าน [IMPORT_SYSTEM.md](IMPORT_SYSTEM.md). สถานะ candidate ต้อง UAT จริงก่อน Production.
+
+### Import popup / templates
+`assets/admin-modal.js` จัดการ dialog, เพิ่ม/แก้ไขจากผลค้นหา, ปิด/ยกเลิกอย่างปลอดภัย; `assets/admin-import.css` จัด layout และ scroll. `templates/import/*.xlsx` เป็น template แยกประเภท 3 ชีต; endpoint sample เดิมส่งไฟล์นี้และ fallback เป็น generator เดิมเมื่อไม่มีไฟล์. ตัวอ่านรองรับ SpreadsheetML default และ prefixed namespace.
+
+ส่วน annual price reset: `admin.php` GET `price_clear_preview` และ POST `clear_price_refs` → `core/catalog_import.php` (`torClearPricePreview`, `torClearPriceReferences`) → เฉพาะ `medicine_price_references`; popup ใช้ `assets/admin-modal.js` และ `assets/admin-import.css` เดิม. ไม่แก้ TOR/Word/history.

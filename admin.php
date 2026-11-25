@@ -4,6 +4,9 @@ require __DIR__ . '/core/config.php';
 require __DIR__ . '/core/auth.php';
 require __DIR__ . '/core/document_signer_defaults.php';
 requireAdmin();
+require_once __DIR__ . '/core/spreadsheet_import.php';
+require_once __DIR__ . '/core/catalog_import.php';
+require_once __DIR__ . '/core/medicine_catalog_tools.php';
 
 function h(?string $text): string { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
 function post(string $key, string $default = ''): string { return trim((string) ($_POST[$key] ?? $default)); }
@@ -18,484 +21,40 @@ function moneyValue(string $value): float
     return (float) str_replace([',', ' ', "\xc2\xa0"], '', trim($value));
 }
 
-function importText(string $value): string
-{
-    $value = preg_replace('/^\xEF\xBB\xBF/', '', $value) ?? $value;
-    $value = str_replace(["\xc2\xa0", "\r"], [' ', ''], $value);
-    if (function_exists('mb_check_encoding') && !mb_check_encoding($value, 'UTF-8')) {
-        $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8, TIS-620, CP874, Windows-874, ISO-8859-11, ISO-8859-1');
-    }
-    return trim($value);
-}
-
-function appTempDir(): string
-{
-    $dir = __DIR__ . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'tmp';
-    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
-        throw new RuntimeException('ไม่สามารถสร้างโฟลเดอร์ temporary ของระบบได้');
-    }
-    if (!is_writable($dir)) {
-        throw new RuntimeException('โฟลเดอร์ temporary ของระบบไม่สามารถเขียนไฟล์ได้');
-    }
-
-    return $dir;
-}
-
-function appTempFile(string $prefix): string
-{
-    $path = tempnam(appTempDir(), $prefix);
-    if ($path === false) {
-        throw new RuntimeException('ไม่สามารถสร้างไฟล์ temporary ได้');
-    }
-
-    return $path;
-}
-
-function validateUploadedSpreadsheet(array $file): void
-{
-    $size = (int) ($file['size'] ?? 0);
-    if ($size <= 0 || $size > 10 * 1024 * 1024) {
-        throw new RuntimeException('ไฟล์ต้องมีขนาดไม่เกิน 10 MB');
-    }
-    $name = (string) ($file['name'] ?? '');
-    $path = (string) ($file['tmp_name'] ?? '');
-    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-    if (!in_array($ext, ['csv', 'xlsx'], true) || !is_uploaded_file($path)) {
-        throw new RuntimeException('รองรับเฉพาะไฟล์ .xlsx หรือ .csv ที่อัปโหลดโดยตรง');
-    }
-    if ($ext !== 'xlsx') return;
-    if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('Server ยังไม่เปิด PHP ZipArchive จึงอ่านไฟล์ .xlsx ไม่ได้');
-    }
-    $zip = new ZipArchive();
-    if ($zip->open($path) !== true) throw new RuntimeException('ไฟล์ Excel ไม่ถูกต้อง');
-    $totalUncompressed = 0;
-    if ($zip->numFiles > 2000) {
-        $zip->close();
-        throw new RuntimeException('ไฟล์ Excel มีรายการภายในมากเกินไป');
-    }
-    for ($i = 0; $i < $zip->numFiles; $i++) {
-        $stat = $zip->statIndex($i);
-        $totalUncompressed += (int) ($stat['size'] ?? 0);
-        if ($totalUncompressed > 50 * 1024 * 1024) {
-            $zip->close();
-            throw new RuntimeException('ไฟล์ Excel มีขนาดแตกไฟล์มากเกินไป');
-        }
-    }
-    $validWorkbook = $zip->locateName('[Content_Types].xml') !== false
-        && $zip->locateName('xl/worksheets/sheet1.xml') !== false;
-    $zip->close();
-    if (!$validWorkbook) throw new RuntimeException('โครงสร้างไฟล์ Excel ไม่ถูกต้อง');
-}
-
-function spreadsheetColumnIndex(string $cell): int
-{
-    preg_match('/^[A-Z]{1,4}/', strtoupper($cell), $matches);
-    $letters = $matches[0] ?? 'A';
-    $index = 0;
-    $length = strlen($letters);
-    for ($i = 0; $i < $length; $i++) {
-        $letter = $letters[$i];
-        $index = ($index * 26) + (ord($letter) - 64);
-    }
-    return $index - 1;
-}
-
-function zipEntryTempFile(ZipArchive $zip, string $entryName): ?string
-{
-    $stream = $zip->getStream($entryName);
-    if (!$stream) {
-        return null;
-    }
-
-    $tempPath = appTempFile('tor_xlsx_');
-    $temp = fopen($tempPath, 'wb');
-    if (!$temp) {
-        fclose($stream);
-        @unlink($tempPath);
-        return null;
-    }
-
-    stream_copy_to_stream($stream, $temp);
-    fclose($stream);
-    fclose($temp);
-
-    return $tempPath;
-}
-
-function readXlsxSharedStrings(string $path): array
-{
-    $strings = [];
-    if (!class_exists(XMLReader::class)) {
-        throw new RuntimeException('Server ยังไม่เปิด PHP XMLReader จึงอ่านไฟล์ .xlsx ขนาดใหญ่ไม่ได้');
-    }
-
-    $reader = new XMLReader();
-    if (!$reader->open($path)) {
-        return $strings;
-    }
-
-    while ($reader->read()) {
-        if ($reader->nodeType !== XMLReader::ELEMENT || $reader->localName !== 'si') {
-            continue;
-        }
-        $xml = $reader->readOuterXML();
-        $si = simplexml_load_string($xml);
-        $parts = [];
-        if (isset($si->t)) {
-            $parts[] = (string) $si->t;
-        }
-        foreach ($si->r ?? [] as $run) {
-            $parts[] = (string) $run->t;
-        }
-        $strings[] = implode('', $parts);
-    }
-    $reader->close();
-
-    return $strings;
-}
-
-function readXlsxRows(string $path): Generator
-{
-    if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('Server ยังไม่เปิด PHP ZipArchive จึงอ่านไฟล์ .xlsx ไม่ได้');
-    }
-    if (!class_exists(XMLReader::class)) {
-        throw new RuntimeException('Server ยังไม่เปิด PHP XMLReader จึงอ่านไฟล์ .xlsx ไม่ได้');
-    }
-
-    $zip = new ZipArchive();
-    if ($zip->open($path) !== true) {
-        throw new RuntimeException('เปิดไฟล์ Excel ไม่ได้');
-    }
-
-    $sharedStrings = [];
-    $sharedPath = zipEntryTempFile($zip, 'xl/sharedStrings.xml');
-    if ($sharedPath !== null) {
-        $sharedStrings = readXlsxSharedStrings($sharedPath);
-        @unlink($sharedPath);
-    }
-
-    $sheetPath = zipEntryTempFile($zip, 'xl/worksheets/sheet1.xml');
-    if ($sheetPath === null) {
-        $zip->close();
-        throw new RuntimeException('ไม่พบ worksheet แรกในไฟล์ Excel');
-    }
-
-    $reader = new XMLReader();
-    $reader->open($sheetPath);
-    while ($reader->read()) {
-        if ($reader->nodeType !== XMLReader::ELEMENT || $reader->localName !== 'row') {
-            continue;
-        }
-        $row = simplexml_load_string($reader->readOuterXML());
-        $values = [];
-        foreach ($row->c ?? [] as $cell) {
-            $index = spreadsheetColumnIndex((string) $cell['r']);
-            $type = (string) $cell['t'];
-            $value = '';
-            if ($type === 's') {
-                $value = $sharedStrings[(int) $cell->v] ?? '';
-            } elseif ($type === 'inlineStr') {
-                $value = (string) ($cell->is->t ?? '');
-            } else {
-                $value = (string) ($cell->v ?? '');
-            }
-            $values[$index] = importText($value);
-        }
-        if ($values) {
-            ksort($values);
-            yield array_values($values + array_fill(0, 4, ''));
-        }
-    }
-    $reader->close();
-    $zip->close();
-    @unlink($sheetPath);
-}
-
-function readCsvRows(string $path): Generator
-{
-    $handle = fopen($path, 'rb');
-    if (!$handle) return;
-    while (($row = fgetcsv($handle)) !== false) {
-        yield array_map(static fn ($value): string => importText((string) $value), $row);
-    }
-    fclose($handle);
-}
-
-function isPriceReferenceHeader(array $row): bool
-{
-    return strpos((string) ($row[0] ?? ''), 'รายการยา') !== false;
-}
-
-function isMedicineImportHeader(array $row): bool
-{
-    return str_contains(importText((string) ($row[0] ?? '')), 'ชื่อยา');
-}
-
-function isPriceReferenceImportHeader(array $row): bool
-{
-    return str_contains(importText((string) ($row[1] ?? '')), 'รูปแบบยาและความแรง');
-}
-
-function isImportablePriceReferenceRow(array $row): bool
-{
-    if (isPriceReferenceHeader($row)) {
-        return false;
-    }
-
-    $name = trim((string) ($row[0] ?? ''));
-    $strength = trim((string) ($row[1] ?? ''));
-    $unit = trim((string) ($row[2] ?? ''));
-
-    return $name !== '' && $strength !== '' && $unit !== '';
-}
-
-function countImportableRows(iterable $rows): int
-{
-    $count = 0;
-    foreach ($rows as $row) {
-        if (isImportablePriceReferenceRow((array) $row)) {
-            $count++;
-        }
-    }
-    return $count;
-}
-
-function countCsvRows(string $path): int
-{
-    return countImportableRows(readCsvRows($path));
-}
-
-function countXlsxRows(string $path): int
-{
-    return countImportableRows(readXlsxRows($path));
-}
-
-function fileRows(string $path, string $name): Generator
-{
-    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-    if ($ext === 'csv') {
-        yield from readCsvRows($path);
-        return;
-    }
-    if ($ext === 'xlsx') {
-        yield from readXlsxRows($path);
-        return;
-    }
-    throw new RuntimeException('รองรับเฉพาะไฟล์ .xlsx หรือ .csv แบบ UTF-8');
-}
-
-function xmlText(string $value): string
-{
-    return htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8');
-}
-
-function spreadsheetColumnName(int $index): string
-{
-    $name = '';
-    $index++;
-    while ($index > 0) {
-        $remainder = ($index - 1) % 26;
-        $name = chr(65 + $remainder) . $name;
-        $index = intdiv($index - $remainder - 1, 26);
-    }
-    return $name;
-}
-
-function worksheetXml(array $rows): string
-{
-    $xmlRows = [];
-    foreach ($rows as $rowIndex => $row) {
-        $cells = [];
-        foreach ($row as $columnIndex => $value) {
-            $cell = spreadsheetColumnName((int) $columnIndex) . ($rowIndex + 1);
-            $cells[] = '<c r="' . $cell . '" t="inlineStr"><is><t>' . xmlText((string) $value) . '</t></is></c>';
-        }
-        $xmlRows[] = '<row r="' . ($rowIndex + 1) . '">' . implode('', $cells) . '</row>';
-    }
-
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        . '<sheetData>' . implode('', $xmlRows) . '</sheetData>'
-        . '</worksheet>';
-}
-
-function sendSampleCsv(string $filename, array $rows): void
-{
-    header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-
-    $output = fopen('php://output', 'wb');
-    if (!$output) {
-        throw new RuntimeException('ไม่สามารถสร้างไฟล์ตัวอย่าง CSV ได้');
-    }
-
-    fwrite($output, "\xEF\xBB\xBF");
-    foreach ($rows as $row) {
-        fputcsv($output, $row);
-    }
-    fclose($output);
-    exit;
-}
-
-function sendSampleXlsx(string $filename, array $rows): void
-{
-    if (!class_exists(ZipArchive::class)) {
-        sendSampleCsv(preg_replace('/\.xlsx$/i', '.csv', $filename), $rows);
-    }
-
-    try {
-        $path = appTempFile('tor_sample_');
-    } catch (Throwable $e) {
-        sendSampleCsv(preg_replace('/\.xlsx$/i', '.csv', $filename), $rows);
-    }
-
-    $zip = new ZipArchive();
-    if ($zip->open($path, ZipArchive::OVERWRITE) !== true) {
-        @unlink($path);
-        sendSampleCsv(preg_replace('/\.xlsx$/i', '.csv', $filename), $rows);
-    }
-
-    $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
-    $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Import" sheetId="1" r:id="rId1"/></sheets></workbook>');
-    $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
-    $zip->addFromString('xl/worksheets/sheet1.xml', worksheetXml($rows));
-    $zip->close();
-
-    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . filesize($path));
-    readfile($path);
-    @unlink($path);
-    exit;
-}
-
-function isMedicineHeader(array $row): bool
-{
-    $first = importText((string) ($row[0] ?? ''));
-    $second = importText((string) ($row[1] ?? ''));
-    return $first !== '' && (
-        str_contains($first, 'ชื่อยา')
-        || (str_contains($first, 'รายการยา') && (str_contains($second, 'หน่วย') || str_contains($second, 'Unit')))
-    );
-}
-
-function isImportableMedicineRow(array $row): bool
-{
-    if (isMedicineHeader($row)) {
-        return false;
-    }
-
-    $name = importText((string) ($row[0] ?? ''));
-    $unit = importText((string) ($row[1] ?? ''));
-
-    return $name !== '' && $unit !== '';
-}
-
-function importMedicines(iterable $rows): int
-{
-    $findStmt = db()->prepare('SELECT id FROM medicines WHERE name = ? AND unit = ? LIMIT 1');
-    $updateStmt = db()->prepare('UPDATE medicines SET specification = ? WHERE id = ?');
-    $insertStmt = db()->prepare('INSERT INTO medicines (name, unit, specification) VALUES (?, ?, ?)');
-
-    $count = 0;
-    foreach ($rows as $row) {
-        $row = (array) $row;
-        if ($count === 0 && isPriceReferenceImportHeader($row)) {
-            throw new RuntimeException('ไฟล์นี้เป็นรูปแบบราคากลางยา กรุณานำเข้าในหัวข้อราคากลางยา');
-        }
-        if (!isImportableMedicineRow($row)) {
-            continue;
-        }
-
-        $name = importText((string) ($row[0] ?? ''));
-        $unit = importText((string) ($row[1] ?? ''));
-        $specification = importText((string) ($row[2] ?? ''));
-        if ($specification === '') {
-            $specification = $name;
-        }
-
-        $findStmt->execute([$name, $unit]);
-        $id = (int) ($findStmt->fetchColumn() ?: 0);
-        if ($id > 0) {
-            $updateStmt->execute([$specification, $id]);
-        } else {
-            $insertStmt->execute([$name, $unit, $specification]);
-        }
-        $count++;
-    }
-
-    return $count;
-}
-
-function importProgressPath(string $id): string
-{
-    $id = preg_replace('/[^a-zA-Z0-9_-]/', '', $id) ?: 'default';
-    return appTempDir() . DIRECTORY_SEPARATOR . 'tor_import_' . $id . '.json';
-}
-
-function writeImportProgress(string $id, array $data): void
-{
-    file_put_contents(importProgressPath($id), json_encode($data, JSON_UNESCAPED_UNICODE));
-}
-
-function importPriceReferences(iterable $rows, string $sourceFile, int $total = 0, ?callable $progress = null): int
-{
-    $stmt = db()->prepare("
-        INSERT INTO medicine_price_references
-            (medicine_name, dosage_form_strength, unit, reference_price, source_file)
-        VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            reference_price = VALUES(reference_price),
-            source_file = VALUES(source_file)
-    ");
-
-    $count = 0;
-    $processed = 0;
-    foreach ($rows as $i => $row) {
-        if ($count === 0 && isMedicineImportHeader((array) $row)) {
-            throw new RuntimeException('ไฟล์นี้เป็นรูปแบบรายการยา กรุณานำเข้าในหัวข้อรายการยา');
-        }
-        if (!isImportablePriceReferenceRow((array) $row)) {
-            continue;
-        }
-        $processed++;
-        $name = trim((string) ($row[0] ?? ''));
-        $strength = trim((string) ($row[1] ?? ''));
-        $unit = trim((string) ($row[2] ?? ''));
-        $price = moneyValue((string) ($row[3] ?? '0'));
-        if ($name === '' || $strength === '' || $unit === '') {
-            if ($progress && ($processed % 100 === 0 || $processed === $total)) {
-                $progress($processed, $total, $count, 'running');
-            }
-            continue;
-        }
-        $stmt->execute([$name, $strength, $unit, $price, $sourceFile]);
-        $count++;
-        if ($progress && ($processed % 100 === 0 || $processed === $total)) {
-            $progress($processed, $total, $count, 'running');
-        }
-    }
-
-    return $count;
-}
-
 ensurePriceReferenceTable();
 
 $message = '';
 $error = '';
 $submittedAction = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' ? post('action') : '';
 
-if (($_GET['action'] ?? '') === 'import_progress') {
+// All import writes require an authenticated, validated preview token.
+if (str_starts_with((string) ($_GET['action'] ?? ''), 'import_v2_')) {
+    torImportEndpoint(db());
+    exit;
+}
+
+// Admin-only full medicine export and read-only reset preview.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && ($_GET['action'] ?? '') === 'export_medicines') {
+    try { torExportMedicines(db()); exit; }
+    catch (Throwable $e) { error_log('Medicine export failed: '.$e->getMessage()); $error = 'ส่งออกไม่สำเร็จ: '.($e instanceof PDOException ? 'กรุณาตรวจสอบฐานข้อมูล' : $e->getMessage()); }
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && ($_GET['action'] ?? '') === 'medicine_clear_preview') {
+    header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: private, no-store');
+    try { echo json_encode(['ok'=>true]+torMedicineClearPreview(db()), JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR); }
+    catch (Throwable $e) { error_log('Medicine clear preview failed: '.$e->getMessage()); http_response_code(500); echo json_encode(['ok'=>false,'error'=>'ไม่สามารถตรวจสอบรายการยาได้'],JSON_UNESCAPED_UNICODE); }
+    exit;
+}
+
+// Read-only confirmation snapshot for an explicit annual price-catalog reset.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && ($_GET['action'] ?? '') === 'price_clear_preview') {
     header('Content-Type: application/json; charset=utf-8');
-    $id = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_GET['id'] ?? ''));
-    $path = importProgressPath($id);
-    if ($id !== '' && is_file($path)) {
-        echo file_get_contents($path);
-    } else {
-        echo json_encode(['status' => 'waiting', 'processed' => 0, 'total' => 0, 'imported' => 0], JSON_UNESCAPED_UNICODE);
+    header('Cache-Control: private, no-store');
+    try {
+        echo json_encode(['ok'=>true] + torClearPricePreview(db()), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    } catch (Throwable $e) {
+        error_log('Price clear preview failed: '.$e->getMessage());
+        http_response_code(500);
+        echo json_encode(['ok'=>false,'error'=>'ไม่สามารถตรวจข้อมูลราคากลางได้ กรุณาตรวจสอบฐานข้อมูล'], JSON_UNESCAPED_UNICODE);
     }
     exit;
 }
@@ -545,14 +104,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && in_array((string) ($_GET[
 }
 
 if (($_GET['action'] ?? '') === 'sample_medicines') {
+    $template = __DIR__ . '/templates/import/TOR_SKP_v1.2.0_medicine_template.xlsx';
+    if (is_file($template) && is_readable($template)) {
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="TOR_SKP_v1.2.0_medicine_template.xlsx"');
+        header('Content-Length: ' . filesize($template));
+        readfile($template);
+        exit;
+    }
     sendSampleXlsx('medicine_import_sample.xlsx', [
         ['ชื่อยา', 'หน่วย', 'คุณสมบัติยา'],
-        ['Acyclovir 400 mg', 'tablet', 'เป็นยาเม็ดหรือแคปซูล ชนิดรับประทาน'],
+        ['Acyclovir 400 mg', 'tablet', "1. เป็นยาเม็ดชนิดรับประทาน\n2. ประกอบด้วยตัวยา Acyclovir 400 mg\n3. บรรจุในภาชนะปิดสนิท\n4. ฉลาก\n- ระบุชื่อยาและความแรง"],
         ['Amoxicillin 500 mg', 'capsule', 'เป็นยาแคปซูล ชนิดรับประทาน'],
     ]);
 }
 
 if (($_GET['action'] ?? '') === 'sample_price_refs') {
+    $template = __DIR__ . '/templates/import/TOR_SKP_v1.2.0_price_reference_template.xlsx';
+    if (is_file($template) && is_readable($template)) {
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="TOR_SKP_v1.2.0_price_reference_template.xlsx"');
+        header('Content-Length: ' . filesize($template));
+        readfile($template);
+        exit;
+    }
     sendSampleXlsx('medicine_price_reference_sample.xlsx', [
         ['รายการยา', 'รูปแบบยาและความแรง', 'หน่วย', 'ราคากลางยาต่อหน่วย (บาท)'],
         ['Acyclovir', 'tablet 400 mg', 'tablet', '2.50'],
@@ -599,14 +174,8 @@ try {
             $message = 'ลบรายการยาแล้ว';
         }
 
-        if ($action === 'import_medicines') {
-            if (!isset($_FILES['medicine_file']) || $_FILES['medicine_file']['error'] !== UPLOAD_ERR_OK) {
-                throw new RuntimeException('กรุณาเลือกไฟล์ Excel หรือ CSV');
-            }
-            validateUploadedSpreadsheet($_FILES['medicine_file']);
-            $name = (string) $_FILES['medicine_file']['name'];
-            $count = importMedicines(fileRows($_FILES['medicine_file']['tmp_name'], $name));
-            $message = "นำเข้ารายการยา {$count} รายการแล้ว";
+        if (in_array($action, ['import_medicines', 'import_price_refs'], true)) {
+            throw new RuntimeException('กรุณาโหลดหน้าใหม่และตรวจสอบ Preview ก่อนยืนยันนำเข้า');
         }
 
         if ($action === 'save_price_ref') {
@@ -629,75 +198,28 @@ try {
             }
         }
 
+        if ($action === 'clear_medicines') {
+            $expected = filter_var(post('expected_count'), FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
+            if ($expected === false) throw new RuntimeException('จำนวนรายการไม่ถูกต้อง กรุณาเปิดหน้าต่างใหม่');
+            $removed = torClearMedicines(db(), post('snapshot_hash'), $expected, post('confirm_phrase'), post('backup_ack') === '1');
+            $message = 'ล้างข้อมูลรายการยาและคุณลักษณะแล้ว '.number_format($removed).' รายการ';
+        }
+
+        if ($action === 'clear_price_refs') {
+            $expected = filter_var(post('expected_count'), FILTER_VALIDATE_INT, ['options'=>['min_range'=>1]]);
+            if ($expected === false) throw new RuntimeException('จำนวนรายการไม่ถูกต้อง กรุณาเปิดหน้าต่างใหม่');
+            $removed = torClearPriceReferences(db(), post('snapshot_hash'), $expected, post('confirm_phrase'), post('backup_ack') === '1');
+            $message = 'ล้างข้อมูลราคากลางแล้ว '.number_format($removed).' รายการ สามารถนำเข้าราคากลางชุดใหม่ได้';
+        }
+
         if ($action === 'delete_price_ref') {
             $stmt = db()->prepare('DELETE FROM medicine_price_references WHERE id = ?');
             $stmt->execute([(int) post('id')]);
             $message = 'ลบราคากลางยาแล้ว';
         }
 
-        if ($action === 'import_price_refs') {
-            if (!isset($_FILES['price_file']) || $_FILES['price_file']['error'] !== UPLOAD_ERR_OK) {
-                throw new RuntimeException('กรุณาเลือกไฟล์ Excel หรือ CSV');
-            }
-            validateUploadedSpreadsheet($_FILES['price_file']);
-            $importId = preg_replace('/[^a-zA-Z0-9_-]/', '', post('import_id')) ?: bin2hex(random_bytes(8));
-            writeImportProgress($importId, [
-                'status' => 'starting',
-                'processed' => 0,
-                'total' => 0,
-                'imported' => 0,
-                'message' => 'กำลังเตรียมไฟล์',
-            ]);
-            if (post('clear_existing') === '1') {
-                db()->exec('TRUNCATE TABLE medicine_price_references');
-            }
-            $name = $_FILES['price_file']['name'];
-            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-            $total = $ext === 'csv'
-                ? countCsvRows($_FILES['price_file']['tmp_name'])
-                : countXlsxRows($_FILES['price_file']['tmp_name']);
-            writeImportProgress($importId, [
-                'status' => 'running',
-                'processed' => 0,
-                'total' => $total,
-                'imported' => 0,
-                'message' => 'เริ่มนำเข้า',
-            ]);
-            $rows = $ext === 'csv'
-                ? readCsvRows($_FILES['price_file']['tmp_name'])
-                : readXlsxRows($_FILES['price_file']['tmp_name']);
-            $count = importPriceReferences($rows, $name, $total, function (int $processed, int $total, int $imported, string $status) use ($importId): void {
-                writeImportProgress($importId, [
-                    'status' => $status,
-                    'processed' => $processed,
-                    'total' => $total,
-                    'imported' => $imported,
-                    'message' => 'กำลังนำเข้า',
-                ]);
-            });
-            writeImportProgress($importId, [
-                'status' => 'done',
-                'processed' => $total,
-                'total' => $total,
-                'imported' => $count,
-                'message' => 'นำเข้าเสร็จแล้ว',
-            ]);
-            $message = "นำเข้าราคากลางยา {$count} รายการแล้ว";
-        }
     }
 } catch (Throwable $e) {
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && post('action') === 'import_price_refs') {
-        $importId = preg_replace('/[^a-zA-Z0-9_-]/', '', post('import_id'));
-        if ($importId !== '') {
-            writeImportProgress($importId, [
-                'status' => 'error',
-                'processed' => 0,
-                'total' => 0,
-                'imported' => 0,
-                'message' => $e->getMessage(),
-            ]);
-        }
-    }
     $error = $e->getMessage();
 }
 
@@ -714,6 +236,12 @@ if (isset($_GET['edit_price'])) {
     $stmt->execute([(int) $_GET['edit_price']]);
     $editPrice = $stmt->fetch() ?: null;
 }
+
+// Preserve manual-entry values after a validation/database error and reopen the modal.
+$medicineFormError = $error !== '' && $submittedAction === 'save_medicine';
+$priceFormError = $error !== '' && $submittedAction === 'save_price_ref';
+if ($medicineFormError) $editMedicine = ['id'=>(int)post('id'),'name'=>post('name'),'unit'=>post('unit'),'specification'=>post('specification')];
+if ($priceFormError) $editPrice = ['id'=>(int)post('id'),'medicine_name'=>post('medicine_name'),'dosage_form_strength'=>post('dosage_form_strength'),'unit'=>post('price_unit'),'reference_price'=>post('reference_price')];
 
 $medicineSearch = trim((string) ($_GET['medicine_search'] ?? ''));
 $priceSearch = trim((string) ($_GET['price_search'] ?? ''));
@@ -746,8 +274,8 @@ $priceReferenceTotal = (int) db()->query('SELECT COUNT(*) FROM medicine_price_re
 $principleSignerDefaults = documentSignerDefaults('principle_approval');
 
 $openSigners = $submittedAction === 'save_document_signer_defaults';
-$openMedicines = $editMedicine !== null || $medicineSearch !== '' || in_array($submittedAction, ['save_medicine', 'delete_medicine', 'import_medicines'], true);
-$openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedAction, ['save_price_ref', 'delete_price_ref', 'import_price_refs'], true);
+$openMedicines = $editMedicine !== null || $medicineSearch !== '' || in_array($submittedAction, ['save_medicine', 'delete_medicine', 'import_medicines', 'clear_medicines'], true);
+$openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedAction, ['save_price_ref', 'delete_price_ref', 'import_price_refs', 'clear_price_refs'], true);
 ?>
 <!doctype html>
 <html lang="th">
@@ -761,6 +289,7 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
     <style>
         .admin-panel > summary::-webkit-details-marker { display: none; }
     </style>
+    <link rel="stylesheet" href="assets/admin-import.css?v=1203">
 </head>
 <body class="min-h-screen bg-zinc-950 text-zinc-100 backoffice-page admin-backoffice">
 <?php require __DIR__ . '/components/navbar.php'; ?>
@@ -809,6 +338,13 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                 </div>
                 <p id="medicines-search-status" role="status" aria-live="polite" class="compact-status">กำลังแสดงรายการล่าสุดสูงสุด 50 รายการ</p>
             </form>
+            <div class="tor-catalog-tools" aria-label="จัดการรายการยา">
+                <button type="button" class="tor-modal-primary" data-modal-add="medicines"><span aria-hidden="true">＋</span> เพิ่มรายการยา</button>
+                <button type="button" class="tor-modal-secondary" data-modal-open="medicines-import-box">นำเข้า Excel / CSV</button>
+                <a class="tor-template-link" href="admin.php?action=sample_medicines">ดาวน์โหลด Excel Template</a>
+                <a class="tor-modal-secondary" href="admin.php?action=export_medicines">ส่งออก Excel รายการยาทั้งหมด</a>
+                <button type="button" class="tor-modal-danger tor-clear-trigger" data-modal-open="medicines-clear-box">ล้างรายการยาทั้งหมด</button>
+            </div>
             <div class="compact-table-viewport">
                 <table class="w-full min-w-[760px] text-sm">
                     <thead class="sticky top-0 bg-zinc-950 text-zinc-300">
@@ -826,7 +362,7 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                             <td class="px-3 py-2 align-top"><?= h($medicine['unit']) ?></td>
                             <td class="max-w-md whitespace-pre-line px-3 py-2 align-top text-zinc-300"><?= h($medicine['specification']) ?></td>
                             <td class="px-3 py-2 align-top text-right">
-                                <a href="admin.php?edit_medicine=<?= (int) $medicine['id'] ?>" class="text-emerald-300 hover:text-emerald-200">แก้ไข</a>
+                                <a href="admin.php?edit_medicine=<?= (int) $medicine['id'] ?>" data-modal-edit="medicines" data-row="<?= h(json_encode(['id'=> (int) $medicine['id'], 'name'=>$medicine['name'], 'unit'=>$medicine['unit'], 'specification'=>$medicine['specification']], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)) ?>" class="text-emerald-300 hover:text-emerald-200">แก้ไข</a>
                                 <form method="post" class="ml-3 inline" onsubmit="return confirm('ยืนยันลบรายการยานี้?')">
                                     <input type="hidden" name="action" value="delete_medicine">
                                     <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
@@ -842,57 +378,6 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
             <div class="compact-pager" data-live-pager="medicines" aria-label="เลื่อนหน้าผลการค้นหา">
                 <span id="medicines-page-info">แสดงสูงสุด 50 รายการแรก</span>
                 <div><button type="button" data-live-prev="medicines" disabled>ก่อนหน้า</button><button type="button" data-live-next="medicines">ถัดไป</button></div>
-            </div>
-            <div class="compact-utility-row">
-              <details class="compact-tool" id="medicines-edit-box"  <?= $editMedicine ? 'open' : '' ?>>
-                <summary>เพิ่ม / แก้ไขรายการยา</summary>
-                <div class="compact-tool-content">
-            <h2 class="mt-5 text-lg font-semibold"><?= $editMedicine ? 'แก้ไขรายการยา' : 'เพิ่มรายการยาเอง' ?></h2>
-            <form method="post" class="mt-4 grid gap-3">
-                <input type="hidden" name="action" value="save_medicine">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <input type="hidden" name="id" value="<?= h((string) ($editMedicine['id'] ?? 0)) ?>">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">ชื่อยา</span>
-                    <input name="name" value="<?= h($editMedicine['name'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-zinc-300">หน่วย</span>
-                    <input name="unit" value="<?= h($editMedicine['unit'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-zinc-300">คุณสมบัติยา</span>
-                    <textarea name="specification" rows="4" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400"><?= h($editMedicine['specification'] ?? '') ?></textarea>
-                </label>
-                <div class="flex gap-3">
-                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">บันทึก</button>
-                    <?php if ($editMedicine): ?>
-                        <a href="admin.php" class="rounded-md border border-zinc-700 px-4 py-2 hover:border-emerald-400">ยกเลิก</a>
-                    <?php endif; ?>
-                </div>
-            </form>
-
-                </div>
-              </details>
-              <details class="compact-tool" id="medicines-import-box">
-                <summary>นำเข้า Excel / CSV</summary>
-                <div class="compact-tool-content">
-            <form method="post" enctype="multipart/form-data" class="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
-                <input type="hidden" name="action" value="import_medicines">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">นำเข้ารายการยาจาก Excel/CSV UTF-8</span>
-                    <input type="file" name="medicine_file" accept=".xlsx,.csv" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
-                </label>
-                <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">นำเข้ารายการยา</button>
-                    <a href="admin.php?action=sample_medicines" class="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-emerald-400">ดาวน์โหลด Excel ตัวอย่าง</a>
-                    <span class="text-xs text-zinc-500">คอลัมน์: ชื่อยา/รายการยา, หน่วย, คุณสมบัติยา</span>
-                </div>
-            </form>
-
-                </div>
-              </details>
             </div>
             </details>
         </section>
@@ -915,6 +400,12 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                 </div>
                 <p id="prices-search-status" role="status" aria-live="polite" class="compact-status">กำลังแสดงรายการล่าสุดสูงสุด 50 รายการ</p>
             </form>
+            <div class="tor-catalog-tools" aria-label="จัดการราคากลางยา">
+                <button type="button" class="tor-modal-primary" data-modal-add="prices"><span aria-hidden="true">＋</span> เพิ่มราคากลาง</button>
+                <button type="button" class="tor-modal-secondary" data-modal-open="prices-import-box">นำเข้า Excel / CSV</button>
+                <a class="tor-template-link" href="admin.php?action=sample_price_refs">ดาวน์โหลด Excel Template</a>
+                <button type="button" class="tor-modal-danger tor-clear-trigger" data-modal-open="prices-clear-box">ล้างราคากลางทั้งหมด</button>
+            </div>
             <div class="compact-table-viewport">
                 <table class="w-full min-w-[860px] text-sm">
                     <thead class="sticky top-0 bg-zinc-950 text-zinc-300">
@@ -934,7 +425,7 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                             <td class="px-3 py-2 align-top"><?= h($row['unit']) ?></td>
                             <td class="px-3 py-2 align-top text-right"><?= number_format((float) $row['reference_price'], 2) ?></td>
                             <td class="px-3 py-2 align-top text-right">
-                                <a href="admin.php?edit_price=<?= (int) $row['id'] ?>" class="text-emerald-300 hover:text-emerald-200">แก้ไข</a>
+                                <a href="admin.php?edit_price=<?= (int) $row['id'] ?>" data-modal-edit="prices" data-row="<?= h(json_encode(['id'=>(int) $row['id'], 'medicine_name'=>$row['medicine_name'], 'dosage_form_strength'=>$row['dosage_form_strength'], 'unit'=>$row['unit'], 'reference_price'=>$row['reference_price']], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)) ?>" class="text-emerald-300 hover:text-emerald-200">แก้ไข</a>
                                 <form method="post" class="ml-3 inline" onsubmit="return confirm('ยืนยันลบราคากลางยานี้?')">
                                     <input type="hidden" name="action" value="delete_price_ref">
                                     <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
@@ -950,69 +441,6 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
             <div class="compact-pager" data-live-pager="prices" aria-label="เลื่อนหน้าผลการค้นหา">
                 <span id="prices-page-info">แสดงสูงสุด 50 รายการแรก</span>
                 <div><button type="button" data-live-prev="prices" disabled>ก่อนหน้า</button><button type="button" data-live-next="prices">ถัดไป</button></div>
-            </div>
-            <div class="compact-utility-row">
-              <details class="compact-tool" id="prices-edit-box"  <?= $editPrice ? 'open' : '' ?>>
-                <summary>เพิ่ม / แก้ไขราคากลาง</summary>
-                <div class="compact-tool-content">
-            <form method="post" class="mt-5 grid gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-4">
-                <h3 class="font-medium"><?= $editPrice ? 'แก้ไขราคากลางยา' : 'เพิ่มราคากลางยาเอง' ?></h3>
-                <input type="hidden" name="action" value="save_price_ref">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <input type="hidden" name="id" value="<?= h((string) ($editPrice['id'] ?? 0)) ?>">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">รายการยา</span>
-                    <input name="medicine_name" value="<?= h($editPrice['medicine_name'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-zinc-300">รูปแบบยาและความแรง</span>
-                    <input name="dosage_form_strength" value="<?= h($editPrice['dosage_form_strength'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                </label>
-                <div class="grid gap-3 md:grid-cols-2">
-                    <label class="block">
-                        <span class="text-sm text-zinc-300">หน่วย</span>
-                        <input name="price_unit" value="<?= h($editPrice['unit'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
-                    </label>
-                    <label class="block">
-                        <span class="text-sm text-zinc-300">ราคากลางต่อหน่วย</span>
-                        <input name="reference_price" type="text" value="<?= h(isset($editPrice['reference_price']) ? number_format((float) $editPrice['reference_price'], 2) : '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-right outline-none focus:border-emerald-400">
-                    </label>
-                </div>
-                <div class="flex gap-3">
-                    <button class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">บันทึก</button>
-                    <?php if ($editPrice): ?>
-                        <a href="admin.php" class="rounded-md border border-zinc-700 px-4 py-2 hover:border-emerald-400">ยกเลิก</a>
-                    <?php endif; ?>
-                </div>
-            </form>
-
-                </div>
-              </details>
-              <details class="compact-tool" id="prices-import-box">
-                <summary>นำเข้า Excel / CSV</summary>
-                <div class="compact-tool-content">
-            <form id="price_import_form" method="post" enctype="multipart/form-data" class="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
-                <input type="hidden" name="action" value="import_price_refs">
-                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-                <input type="hidden" id="import_id" name="import_id" value="">
-                <label class="block">
-                    <span class="text-sm text-zinc-300">นำเข้า Excel/CSV</span>
-                    <input type="file" name="price_file" accept=".xlsx,.csv" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">
-                </label>
-                <label class="mt-3 flex items-center gap-2 text-sm text-zinc-300">
-                    <input type="checkbox" name="clear_existing" value="1" class="rounded border-zinc-700 bg-zinc-950">
-                    ล้างข้อมูลเดิมก่อนนำเข้า
-                </label>
-                <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <button id="import_button" class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-zinc-950 hover:bg-emerald-400">นำเข้า</button>
-                    <a href="admin.php?action=sample_price_refs" class="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:border-emerald-400">ดาวน์โหลด Excel ตัวอย่าง</a>
-                    <span id="import_status" class="text-sm text-zinc-400">ยังไม่ได้นำเข้า</span>
-                </div>
-                <p class="mt-2 text-xs text-zinc-500">คอลัมน์ที่รองรับ: รายการยา, รูปแบบยาและความแรง, หน่วย, ราคากลางยาต่อหน่วย (บาท)</p>
-            </form>
-
-                </div>
-              </details>
             </div>
             </details>
         </section>
@@ -1086,12 +514,15 @@ document.querySelectorAll('.admin-panel').forEach((panel) => {
         field.type = 'hidden'; field.name = name; field.value = String(value);
         form.appendChild(field);
     };
-    function appendActions(row, kind, id) {
+    function appendActions(row, kind, item) {
+        const id = Number(item.id);
         const cell = document.createElement('td');
         cell.className = 'px-3 py-2 align-top text-right compact-row-actions';
         const edit = document.createElement('a');
         edit.href = 'admin.php?' + (kind === 'medicines' ? 'edit_medicine=' : 'edit_price=') + encodeURIComponent(String(id));
         edit.textContent = 'แก้ไข';
+        edit.dataset.modalEdit = kind;
+        edit.dataset.row = JSON.stringify(item);
         cell.appendChild(edit);
         const form = document.createElement('form');
         form.method = 'post'; form.className = 'ml-3 inline';
@@ -1127,7 +558,7 @@ document.querySelectorAll('.admin-panel').forEach((panel) => {
                 addCell(tr, Number.isFinite(price) ? price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : item.reference_price,
                     'px-3 py-2 align-top text-right');
             }
-            appendActions(tr, kind, Number(item.id));
+            appendActions(tr, kind, item);
             frag.appendChild(tr);
         });
         tbody.replaceChildren(frag);
@@ -1201,106 +632,101 @@ document.querySelectorAll('.admin-panel').forEach((panel) => {
         next.addEventListener('click', () => {if (page * 50 < total) {page++; refresh();}});
         refresh();
     });
-    // Editing via its existing URL remains compatible; reveal the relevant form.
-    const params = new URLSearchParams(location.search);
-    const editBox = params.has('edit_medicine') ? document.getElementById('medicines-edit-box') :
-        params.has('edit_price') ? document.getElementById('prices-edit-box') : null;
-    if (editBox) {
-        editBox.open = true;
-        const parent = editBox.closest('.admin-panel');
-        if (parent) parent.open = true;
-        requestAnimationFrame(() => editBox.scrollIntoView({block:'center'}));
-    }
+
 })();
 
-const importForm = document.getElementById('price_import_form');
-const importStatus = document.getElementById('import_status');
-const importButton = document.getElementById('import_button');
-const importIdInput = document.getElementById('import_id');
-let importPollTimer = null;
-
-function newImportId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-}
-
-function setImportStatus(data) {
-    const processed = Number(data.processed || 0);
-    const total = Number(data.total || 0);
-    const imported = Number(data.imported || 0);
-    const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
-    if (data.status === 'done') {
-        importStatus.textContent = `เสร็จแล้ว ${imported.toLocaleString()} รายการ จาก ${total.toLocaleString()} แถว`;
-        importStatus.className = 'text-sm text-emerald-300';
-        importButton.disabled = false;
-        importButton.classList.remove('opacity-60');
-        return;
-    }
-    if (data.status === 'error') {
-        importStatus.textContent = data.message || 'นำเข้าไม่สำเร็จ';
-        importStatus.className = 'text-sm text-red-300';
-        importButton.disabled = false;
-        importButton.classList.remove('opacity-60');
-        return;
-    }
-    importStatus.textContent = total > 0
-        ? `กำลังนำเข้า ${processed.toLocaleString()} / ${total.toLocaleString()} แถว (${percent}%)`
-        : (data.message || 'กำลังเตรียมไฟล์');
-    importStatus.className = 'text-sm text-amber-300';
-}
-
-function pollImportProgress(importId) {
-    clearInterval(importPollTimer);
-    importPollTimer = setInterval(async () => {
-        const response = await fetch(`admin.php?action=import_progress&id=${encodeURIComponent(importId)}&t=${Date.now()}`);
-        const data = await response.json();
-        setImportStatus(data);
-        if (data.status === 'done' || data.status === 'error') {
-            clearInterval(importPollTimer);
-        }
-    }, 500);
-}
-
-importForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const fileInput = importForm.querySelector('input[type="file"]');
-    if (!fileInput?.files?.length) {
-        importStatus.textContent = 'กรุณาเลือกไฟล์ก่อน';
-        importStatus.className = 'text-sm text-red-300';
-        return;
-    }
-
-    const importId = newImportId();
-    importIdInput.value = importId;
-    const formData = new FormData(importForm);
-    const xhr = new XMLHttpRequest();
-
-    importButton.disabled = true;
-    importButton.classList.add('opacity-60');
-    importStatus.textContent = 'กำลังอัปโหลดไฟล์ 0%';
-    importStatus.className = 'text-sm text-amber-300';
-
-    xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-            const percent = Math.round((event.loaded / event.total) * 100);
-            importStatus.textContent = `กำลังอัปโหลดไฟล์ ${percent}%`;
-        }
-    });
-
-    xhr.addEventListener('loadstart', () => pollImportProgress(importId));
-    xhr.addEventListener('load', () => {
-        if (xhr.status >= 400) {
-            clearInterval(importPollTimer);
-            setImportStatus({ status: 'error', message: 'นำเข้าไม่สำเร็จ' });
-        }
-    });
-    xhr.addEventListener('error', () => {
-        clearInterval(importPollTimer);
-        setImportStatus({ status: 'error', message: 'เชื่อมต่อไม่สำเร็จ' });
-    });
-
-    xhr.open('POST', 'admin.php');
-    xhr.send(formData);
-});
 </script>
+<dialog class="tor-admin-modal tor-edit-modal" id="medicines-edit-box" aria-labelledby="medicines-edit-title" <?= $editMedicine ? 'data-auto-open' : '' ?>>
+  <header class="tor-modal-header"><div><small>TOR SKP · จัดการข้อมูล</small><h2 id="medicines-edit-title"><?= !empty($editMedicine['id']) ? 'แก้ไขรายการยา' : 'เพิ่มรายการยา' ?></h2></div><button type="button" class="tor-modal-x" data-modal-close aria-label="ปิดหน้าต่าง">×</button></header>
+  <div class="tor-modal-body"><?php if ($medicineFormError): ?><p class="tor-modal-error" role="alert"><?= h($error) ?></p><?php endif; ?><form method="post" action="admin.php#medicine-catalog" class="tor-modal-form">
+                <input type="hidden" name="action" value="save_medicine">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <input type="hidden" name="id" value="<?= h((string) ($editMedicine['id'] ?? 0)) ?>">
+                <label class="block">
+                    <span class="text-sm text-zinc-300">ชื่อยา</span>
+                    <input name="name" required maxlength="255" value="<?= h($editMedicine['name'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-zinc-300">หน่วย</span>
+                    <input name="unit" required maxlength="100" value="<?= h($editMedicine['unit'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-zinc-300">คุณสมบัติยา</span>
+                    <textarea name="specification" required rows="9" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400"><?= h($editMedicine['specification'] ?? '') ?></textarea><small class="tor-modal-hint">ขึ้นบรรทัดใหม่ได้ตามข้อ 1, 2, 3 และข้อย่อย ระบบจะเก็บข้อความตามที่กรอก</small>
+                </label>
+                <div class="tor-modal-actions"><button type="button" class="tor-modal-secondary" data-modal-close>ยกเลิก</button><button type="submit" class="tor-modal-primary">บันทึก</button></div>
+            </form></div>
+</dialog>
+<dialog class="tor-admin-modal tor-import-modal" id="medicines-import-box" aria-labelledby="medicines-import-title">
+  <header class="tor-modal-header"><div><small>TOR SKP · ตรวจสอบก่อนบันทึก</small><h2 id="medicines-import-title">นำเข้ารายการยา</h2></div><button type="button" class="tor-modal-x" data-modal-close aria-label="ปิดหน้าต่าง">×</button></header>
+  <div class="tor-modal-body"><?php $importKind = 'medicines'; require __DIR__ . '/components/catalog_import_panel.php'; ?></div>
+</dialog>
+<dialog class="tor-admin-modal tor-edit-modal" id="prices-edit-box" aria-labelledby="prices-edit-title" <?= $editPrice ? 'data-auto-open' : '' ?>>
+  <header class="tor-modal-header"><div><small>TOR SKP · จัดการข้อมูล</small><h2 id="prices-edit-title"><?= !empty($editPrice['id']) ? 'แก้ไขราคากลางยา' : 'เพิ่มราคากลาง' ?></h2></div><button type="button" class="tor-modal-x" data-modal-close aria-label="ปิดหน้าต่าง">×</button></header>
+  <div class="tor-modal-body"><?php if ($priceFormError): ?><p class="tor-modal-error" role="alert"><?= h($error) ?></p><?php endif; ?><form method="post" action="admin.php#price-references" class="tor-modal-form">
+                <input type="hidden" name="action" value="save_price_ref">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <input type="hidden" name="id" value="<?= h((string) ($editPrice['id'] ?? 0)) ?>">
+                <label class="block">
+                    <span class="text-sm text-zinc-300">รายการยา</span>
+                    <input name="medicine_name" required maxlength="255" value="<?= h($editPrice['medicine_name'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-zinc-300">รูปแบบยาและความแรง</span>
+                    <input name="dosage_form_strength" required maxlength="255" value="<?= h($editPrice['dosage_form_strength'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                </label>
+                <div class="grid gap-3 md:grid-cols-2">
+                    <label class="block">
+                        <span class="text-sm text-zinc-300">หน่วย</span>
+                        <input name="price_unit" required maxlength="100" value="<?= h($editPrice['unit'] ?? '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-400">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm text-zinc-300">ราคากลางต่อหน่วย</span>
+                        <input name="reference_price" type="text" value="<?= h(isset($editPrice['reference_price']) ? (string) $editPrice['reference_price'] : '') ?>" class="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-right outline-none focus:border-emerald-400">
+                    </label>
+                </div>
+                <div class="tor-modal-actions"><button type="button" class="tor-modal-secondary" data-modal-close>ยกเลิก</button><button type="submit" class="tor-modal-primary">บันทึก</button></div>
+            </form></div>
+</dialog>
+<dialog class="tor-admin-modal tor-import-modal" id="prices-import-box" aria-labelledby="prices-import-title">
+  <header class="tor-modal-header"><div><small>TOR SKP · ตรวจสอบก่อนบันทึก</small><h2 id="prices-import-title">นำเข้าราคากลางยา</h2></div><button type="button" class="tor-modal-x" data-modal-close aria-label="ปิดหน้าต่าง">×</button></header>
+  <div class="tor-modal-body"><?php $importKind = 'prices'; require __DIR__ . '/components/catalog_import_panel.php'; ?></div>
+</dialog>
+<dialog class="tor-admin-modal tor-clear-modal" id="medicines-clear-box" aria-labelledby="medicines-clear-title">
+  <header class="tor-modal-header"><div><small>TOR SKP · จัดการคลังคุณลักษณะยา</small><h2 id="medicines-clear-title">ล้างรายการยาทั้งหมด</h2></div><button type="button" class="tor-modal-x" data-modal-close aria-label="ปิดหน้าต่าง">×</button></header>
+  <div class="tor-modal-body">
+    <form method="post" action="admin.php#medicine-catalog" class="tor-modal-form" id="medicine-clear-form">
+      <input type="hidden" name="action" value="clear_medicines">
+      <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+      <input type="hidden" name="snapshot_hash" value="">
+      <input type="hidden" name="expected_count" value="">
+      <div class="tor-clear-notice"><strong>รายการยาที่จะล้าง: <span id="medicine-clear-count" aria-live="polite">กำลังตรวจสอบ…</span></strong><p>ล้างทุกรายการในคลังรายการยา ไม่ใช่เฉพาะผลการค้นหา ไม่สามารถเรียกคืนจากหน้านี้ได้</p></div>
+      <p class="tor-modal-hint">ไม่ลบราคากลางหรือประวัติเอกสาร อนุญาตให้ล้างเฉพาะเมื่อยังไม่มีชุดจัดซื้อหรือเอกสารบันทึกไว้ กรุณาปิดฟอร์มเอกสารที่เปิดค้างและส่งออก Excel/สำรองฐานก่อนล้าง หากมีเอกสารเดิม ให้ใช้ Import แบบเพิ่มและอัปเดตแทน</p>
+      <p id="medicine-clear-error" class="tor-modal-error" role="alert" hidden></p>
+      <label class="tor-clear-ack"><input type="checkbox" name="backup_ack" value="1" required><span>สำรองข้อมูลแล้ว และเข้าใจว่ารายการยาและคุณลักษณะทั้งหมดจะถูกลบ</span></label>
+      <label><span>พิมพ์คำว่า ล้างรายการยา เพื่อยืนยัน</span><input name="confirm_phrase" required autocomplete="off" maxlength="32" placeholder="ล้างรายการยา"></label>
+      <div class="tor-modal-actions"><button type="button" class="tor-modal-secondary" data-modal-close>ยกเลิก</button><button type="submit" class="tor-modal-danger" disabled>ยืนยันล้างรายการยา</button></div>
+    </form>
+  </div>
+</dialog>
+<dialog class="tor-admin-modal tor-clear-modal" id="prices-clear-box" aria-labelledby="prices-clear-title">
+  <header class="tor-modal-header"><div><small>TOR SKP · อัปเดตราคากลางประจำปี</small><h2 id="prices-clear-title">ล้างราคากลางทั้งหมด</h2></div><button type="button" class="tor-modal-x" data-modal-close aria-label="ปิดหน้าต่าง">×</button></header>
+  <div class="tor-modal-body">
+    <form method="post" action="admin.php#price-references" class="tor-modal-form" id="price-clear-form">
+      <input type="hidden" name="action" value="clear_price_refs">
+      <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+      <input type="hidden" name="snapshot_hash" value="">
+      <input type="hidden" name="expected_count" value="">
+      <div class="tor-clear-notice"><strong>ราคากลางที่จะล้าง: <span id="price-clear-count" aria-live="polite">กำลังตรวจสอบ…</span></strong><p>ล้างทุกรายการในคลังราคากลาง ไม่ใช่เฉพาะผลการค้นหา ไม่สามารถเรียกคืนจากหน้านี้ได้</p></div>
+      <p class="tor-modal-hint">ไม่ลบรายการยา คุณลักษณะยา หรือประวัติเอกสารที่บันทึกไว้ หากต้องการอัปเดตราคากลางโดยไม่ให้คลังว่างระหว่างปี ให้ใช้โหมดแทนที่ทั้งหมดใน Import แทน</p>
+      <p id="price-clear-error" class="tor-modal-error" role="alert" hidden></p>
+      <label class="tor-clear-ack"><input type="checkbox" name="backup_ack" value="1" required><span>สำรองข้อมูลแล้ว และเข้าใจว่าราคากลางทั้งหมดจะถูกลบ</span></label>
+      <label><span>พิมพ์คำว่า ล้างราคากลาง เพื่อยืนยัน</span><input name="confirm_phrase" required autocomplete="off" maxlength="32" placeholder="ล้างราคากลาง"></label>
+      <div class="tor-modal-actions"><button type="button" class="tor-modal-secondary" data-modal-close>ยกเลิก</button><button type="submit" class="tor-modal-danger" disabled>ยืนยันล้างราคากลาง</button></div>
+    </form>
+  </div>
+</dialog>
+<script src="assets/admin-import.js?v=1202"></script>
+<script src="assets/admin-modal.js?v=1205"></script>
 </body>
 </html>
