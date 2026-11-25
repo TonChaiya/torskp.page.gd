@@ -25,3 +25,24 @@
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Private data: SQL is deny-by-default; only reviewed structural files are allowed.
+*.sql
+!/database/schema.sql
+!/database/migrations/*.sql
+!/database/checks/*.sql
+*.sql.gz
+*.sql.zip
+*.sql.7z
+*.sql.bz2
+*.sql.xz
+*.dump
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+/database/backups/
+/database/exports/
+/backups/
+/exports/

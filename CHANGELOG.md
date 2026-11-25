@@ -21,8 +21,14 @@
 - บริษัทผูกกับ case, ชื่อไฟล์อิง step/date/number/supplier; history เปิดรายหัวข้อและรวม Word ราย case
 - Word Merge V1 (DOCX ซ้อน) → V2 (section/style remap) → V3 (Thai alignment) → V4 (table paragraph zero); ผู้ใช้รับรองผล V4 ในชุดที่ทดลอง
 - TOR ข้อความตามที่เลือกเท่านั้น, งบ 6 ล้านแก้ได้, optional revision/year, price_basis reference/offer, ฟอร์มเรียงใหม่; ไม่ย้ายตารางไปแนบท้าย; ไม่เปลี่ยนข้อ 11
-- `schema.sql` และ migration supplier ยังไม่ตรงกับโค้ดล่าสุดทั้งหมด; อ่าน DATABASE ก่อนติดตั้งใหม่
+- ใน release commit เดิม schema.sql และ migration supplier ยังไม่ตรงกับโค้ด; มีการจัดทำ baseline DB ต่อหลัง docs handoff (ดูรายการด้านล่าง)
 
 ## Unreleased — documentation handoff
 
 เพิ่ม README/AGENTS/CLAUDE/CHANGELOG และคู่มือใน docs/. ไม่เปลี่ยน version เว็บไซต์ ไม่แก้โค้ด/DB. ยืนยัน baseline กับ GitHub ก่อนสร้างเอกสารนี้; รายละเอียดหลักฐานและข้อจำกัดใน PROJECT_STATUS. เมื่อ commit docs ให้ใช้ docs-only commit.
+
+## Unreleased — database baseline / backup hygiene
+
+- อ้างอิง Dev export 24 พ.ย. 2569; structure-only 12 ตาราง, 100 คอลัมน์, migration supplier และ read-only checks. ไม่มีข้อมูลจริง/DDL บนฐานเดิม; ไม่เปลี่ยน PHP/UI/Word.
+- เพิ่มกฎ ignore SQL dumps/archive และคู่มือ backup/untrack; ผู้ใช้ต้องสำรองและ untrack เอง. Git history cleanup ยังไม่ดำเนินการ.
+- Docs handoff ก่อนงานนี้อยู่ commit `6c6ed8e0`; งาน DB นี้ยังรอ commit และทดสอบ import DB จริง. เสนอ commit `chore(db): sync v1.1.0 schema and protect private backups`.

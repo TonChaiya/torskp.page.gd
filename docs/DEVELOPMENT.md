@@ -48,3 +48,7 @@ git push origin main
 ```
 
 ตัวอย่างนี้สำหรับเอกสารเท่านั้น ไม่สร้าง tag/version ใหม่โดยอัตโนมัติ. ห้ามใช้ git add . โดยไม่ตรวจไฟล์. ไม่ push เองหากผู้ใช้ไม่ได้สั่ง. ตรวจ remote SHA หลัง push. อย่าลบเอกสารประวัติเดิม; หากข้อมูลเก่าให้ติดป้าย superseded และอ้างไฟล์ canonical.
+
+## Database baseline และ staged safety
+
+ใช้ `database/schema.sql` เฉพาะฐานใหม่ว่าง; read-only checks ก่อนแก้ฐานเดิม. ห้ามรัน migration เดิมทั้งหมดหลัง import schema. ตรวจ `git ls-files -- "*.sql"` และ staged file list; commit เฉพาะ schema/migrations/checks ที่ไม่มีข้อมูลจริง. ดู [DATABASE_BACKUP.md](DATABASE_BACKUP.md).

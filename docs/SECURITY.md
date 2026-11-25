@@ -8,7 +8,7 @@
 
 `core/config.php` ใช้ env สำหรับ production; local fallback เท่านั้น. `.htaccess` ห้าม directory listing, ปิด access SQL/log/ini/composer/env และ core/database/storage มีไฟล์ป้องกันเพิ่มเติม. ต้องตรวจ Apache AllowOverride และการป้องกันจริงบนโฮสต์ (Nginx ไม่อ่าน .htaccess). HTTPS ใน production. ไม่ส่งออก credentials/session/token/dump ใน logs หรือ docs.
 
-**ข้อค้นพบสำคัญ:** Git ยัง track SQL dump 2 ไฟล์ใน database/; dump มีข้อมูลตาราง users และ procurement histories จาก DDL/เนื้อหาที่ตรวจ. มีความเสี่ยงข้อมูลส่วนบุคคล/รหัสผ่าน hash หลุดผ่าน repo หรือ archive เก่า. ZIP ทั้งโครงการถูกลบใน commit ล่าสุด แต่การลบไม่ได้ลบ blob จากประวัติ Git. อย่าคัดลอกหรือเผยข้อมูลเหล่านี้ซ้ำ. เจ้าของควรตรวจ visibility/access, secrets และความจำเป็นของ dump; วางแผนแยก backup ไปที่ private storage และ review history cleanup/credential rotation ตามผลตรวจ โดยต้องได้รับอนุมัติก่อนทำ destructive rewrite. รอบเอกสารนี้ไม่ได้ลบ dump หรือแก้ประวัติ Git.
+**ข้อค้นพบสำคัญ:** Git ยัง track SQL dump 2 ไฟล์ใน database/; dump มีข้อมูลตาราง users และ procurement histories จาก DDL/เนื้อหาที่ตรวจ. มีความเสี่ยงข้อมูลส่วนบุคคล/รหัสผ่าน hash หลุดผ่าน repo หรือ archive เก่า. ZIP ทั้งโครงการถูกลบใน commit ล่าสุด แต่การลบไม่ได้ลบ blob จากประวัติ Git. อย่าคัดลอกหรือเผยข้อมูลเหล่านี้ซ้ำ. เจ้าของควรตรวจ visibility/access, secrets และความจำเป็นของ dump; วางแผนแยก backup ไปที่ private storage และ review history cleanup/credential rotation ตามผลตรวจ โดยต้องได้รับอนุมัติก่อนทำ destructive rewrite. รอบ DB baseline เพิ่มกฎ .gitignore และคู่มือ [DATABASE_BACKUP.md](DATABASE_BACKUP.md) สำหรับสำรองและ untrack 2 ไฟล์; ยังไม่ได้ untrack/push/ล้าง history จริง. schema ใหม่ไม่มีข้อมูลบัญชีหรือ seed; ไม่ใช้ backup เป็น source สำหรับ CI.
 
 ## การทดสอบและ upload
 

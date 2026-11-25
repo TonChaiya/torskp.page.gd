@@ -1,3 +1,5 @@
+> บัญชีไฟล์นี้เป็น snapshot ประวัติ ณ HEAD 986c48cd ก่อน docs และ DB baseline ไม่ใช่รายการไฟล์ปัจจุบัน; schema/ignore/docs เปลี่ยนหลังจากนั้นตาม CHANGELOG. รายการ dump ที่เคย track ใช้เพื่อระบุไฟล์ที่จะ untrack ไม่ใช่คำสั่งให้เก็บหรือเผยแพร่ข้อมูล.
+
 # Repository inventory — audited baseline
 
 GitHub main: `986c48cdcfe76116742a3a8cccffac2c0e75eef6` (v1.1.0 + archive deletion). Tree: `2bfba773fd1c561ce904b5e856c72dfb5baf7716`. [ดู tree](https://github.com/TonChaiya/torskp.page.gd/tree/986c48cdcfe76116742a3a8cccffac2c0e75eef6).
