@@ -112,3 +112,6 @@ ALTER TABLE procurement_documents
 
 ### การล้างคลัง `medicines` ใน v1.2.0
 ไม่เปลี่ยน schema: ใช้ `core/medicine_catalog_tools.php` ตรวจ snapshot และ block การล้างเมื่อมีข้อมูลใน procurement_cases, procurement_documents, tor_histories หรือ scope_price_approval_memos เนื่องจากฟอร์ม TOR ยังอ้างอิง ID ใน `medicines`. ไม่ลบตารางเอกสาร ไม่ reset AUTO_INCREMENT และไม่แตะ `medicine_price_references`. หากมีเอกสารเดิมให้ใช้ import merge; Excel export ไม่เก็บ ID จึงไม่ใช่ตัวแทน full SQL backup. ทำการล้างเฉพาะฐานใหม่ที่ยังไม่มีเอกสาร และไม่มีฟอร์ม/ผู้ใช้ทำรายการค้าง.
+
+## v1.3.0 candidate — Snapshot ไม่ต้อง migration
+คง 12 ตารางและชนิดข้อมูลเดิม; `procurement_cases.items_json` เพิ่ม `specification`, `snapshot_source` และ metadata provenance กรณีกู้จาก TOR; `tor_histories.items_json` คงสัญญาข้อความ/ราคา/จำนวน/ขนาดบรรจุเดิม. Legacy TOR 44 แถวไม่มี ID ใน dump เดิมยังแสดงได้จาก archive. ไม่เพิ่ม FK จาก history ไป catalog, ไม่ reset ID. Backfill ต้อง admin ตรวจและสำรองก่อน, lock + recheck hash + update case JSON ที่ตรงค่าเดิม, คง timestamp, ไม่เปลี่ยน TOR/document rows. Readiness audit ตรวจ orphan/invalid/links และ snapshot coverage ก่อน clear. ดู [DOCUMENT_SNAPSHOT.md](DOCUMENT_SNAPSHOT.md). schema baseline และ migration ทั้ง 5 ไฟล์อยู่ Git ตั้งแต่ `c923372c`; ไม่ต้อง import schema หรือ rerun migration ในฐาน Dev ที่ตรงกัน. ไม่มีการแก้ฐานจริงในรอบ candidate.

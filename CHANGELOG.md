@@ -56,3 +56,9 @@
 - เพิ่มปุ่มส่งออก Excel ทั้งคลัง `medicines` ไม่จำกัดผลค้นหา/การแบ่งหน้า: ชีต Import, 3 คอลัมน์, ข้อความหลายบรรทัด, freeze header, wrap text, filter, text cell ไม่ใช่สูตร; ไม่มีข้อมูลราคากลาง.
 - เพิ่ม Popup ล้างรายการยาแยกจากราคากลาง: snapshot, จำนวนจริง, รับทราบสำรองข้อมูล, คำยืนยัน `ล้างรายการยา`, ตรวจซ้ำฝั่ง Server, DELETE แบบ batch/transaction ไม่ TRUNCATE. ปิดการล้างถ้ามีชุดจัดซื้อหรือเอกสารใดในสี่ตารางที่เกี่ยวข้อง เพราะหน้า TOR ยังต้องใช้ ID จากคลังเดิม. ใช้ import merge แทนเมื่อมีเอกสารเก่า.
 - ทดสอบ fake PDO/CSV 116 assertions (รวม fixture ราคากลางเดิม 2,520 แถว), ตรวจแพ็กเกจ XLSX 234 แถวจำลองผ่าน PharData adapter และ XML, Chromium offline/mock API ผ่านทั้งสอง Popup. ยังไม่ทดสอบ native ZipArchive, MySQL หรือ Microsoft Excel บน Dev จริง. ไม่แก้ schema, Word Merge, เอกสารทั้งหกขั้นตอน หรือค่าข้อมูลจริง.
+
+## v1.3.0 — Document Snapshot & Catalog Independence (candidate, 25 พ.ย. 2569)
+
+- ฐาน v1.2.0 `fced437f022f07924ca163141b02a14c4f176b5c`. แก้ principle save/open, TOR report/Word, history-bundle hydrate ให้ใช้ข้อมูลที่บันทึกด้วย row token ที่มี ownership/fingerprint; ไม่ remap archive เป็น live ID. คง merge engine V4, สูตรและ layout.
+- เพิ่ม `core/document_snapshot.php`, `catalog_snapshot_review.php`: read-only audit + explicit transactional backfill จาก TOR เดิมที่ match อย่างชัดเจนเท่านั้น; ไม่เขียนทับประวัติ TOR. ใช้ JSON ที่มีอยู่, ไม่มี migration. ตรวจเอกสาร+catalog fingerprint ก่อน clear; incomplete/ recoverable บล็อก; completed TOR ที่มีรายการต่างจาก principle แสดง deferred ไม่เดา spec.
+- Offline prior Dev dump 17/17 histories, 59 rows, 58 recoverable/0 issues/1 deferred. PHP Snapshot 39 assertions, Import 117 assertions (XLSX skipped); TOR 34 HTML comparisons บน catalog เปลี่ยน/ว่างผ่าน. ไม่รับรอง MySQL/Word/Hosting จริง. อ่าน docs/DOCUMENT_SNAPSHOT.md และทดสอบ clone ก่อนล้างจริง. ยังไม่ได้ push.

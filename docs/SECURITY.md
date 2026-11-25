@@ -13,3 +13,6 @@
 ## การทดสอบและ upload
 
 ใช้ฐาน sandbox และข้อมูลสมมติสำหรับ AI/CI; ห้าม resetProcurementWorkflowData/deleteProcurementCase บนฐานจริง. Admin import ต้องรักษาการตรวจไฟล์ XLSX/CSV และ temp cleanup; หลีกเลี่ยง arbitrary upload/path/SQL injection; ใช้ prepared statements และ output escaping. Merge รักษา same-origin fetch, session, CSRF, ไม่เพิ่มการ upload DOCX ไป server, reject DTD/unsupported relationships และตรวจ package structure. ไม่แก้ security gate เพื่อหลีกเลี่ยง error จาก schema เก่า.
+
+## v1.3.0 candidate — ข้อมูลย้อนหลัง
+`catalog_snapshot_review.php` ต้อง requireAdmin, POST CSRF และ backup acknowledgement; แสดงข้อมูล archive เฉพาะ admin, no-store. Server ตรวจ row key scope/fingerprint ไม่รับ spec จาก client; ล้าง catalog ตรวจ hash ของ catalog + เอกสารซ้ำภายใต้ transaction. ไม่กู้ข้อมูลด้วยการเดา, ไม่ commit SQL/fixtures จริงหรือ staging. Runtime files ที่พบใน v1.2.0 HEAD ผู้ใช้เลื่อน cleanup ไว้ ไม่ใช่การอนุญาตเผยแพร่เพิ่ม. ไม่ rewrite Git history เอง. อ่าน [DOCUMENT_SNAPSHOT.md](DOCUMENT_SNAPSHOT.md).

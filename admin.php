@@ -343,6 +343,7 @@ $openPrices = $editPrice !== null || $priceSearch !== '' || in_array($submittedA
                 <button type="button" class="tor-modal-secondary" data-modal-open="medicines-import-box">นำเข้า Excel / CSV</button>
                 <a class="tor-template-link" href="admin.php?action=sample_medicines">ดาวน์โหลด Excel Template</a>
                 <a class="tor-modal-secondary" href="admin.php?action=export_medicines">ส่งออก Excel รายการยาทั้งหมด</a>
+                <a class="tor-modal-secondary" href="catalog_snapshot_review.php">ตรวจ Snapshot เอกสาร</a>
                 <button type="button" class="tor-modal-danger tor-clear-trigger" data-modal-open="medicines-clear-box">ล้างรายการยาทั้งหมด</button>
             </div>
             <div class="compact-table-viewport">
@@ -701,7 +702,8 @@ document.querySelectorAll('.admin-panel').forEach((panel) => {
       <input type="hidden" name="snapshot_hash" value="">
       <input type="hidden" name="expected_count" value="">
       <div class="tor-clear-notice"><strong>รายการยาที่จะล้าง: <span id="medicine-clear-count" aria-live="polite">กำลังตรวจสอบ…</span></strong><p>ล้างทุกรายการในคลังรายการยา ไม่ใช่เฉพาะผลการค้นหา ไม่สามารถเรียกคืนจากหน้านี้ได้</p></div>
-      <p class="tor-modal-hint">ไม่ลบราคากลางหรือประวัติเอกสาร อนุญาตให้ล้างเฉพาะเมื่อยังไม่มีชุดจัดซื้อหรือเอกสารบันทึกไว้ กรุณาปิดฟอร์มเอกสารที่เปิดค้างและส่งออก Excel/สำรองฐานก่อนล้าง หากมีเอกสารเดิม ให้ใช้ Import แบบเพิ่มและอัปเดตแทน</p>
+      <p class="tor-modal-hint">ไม่ลบราคากลางหรือประวัติเอกสาร ระบบตรวจ Snapshot ก่อนอนุญาตให้ล้าง กรุณาปิดฟอร์มเอกสารที่เปิดค้างและสำรองฐานก่อนล้าง หากมีข้อมูลไม่ครบให้เปิด <a class="underline" href="catalog_snapshot_review.php">ตรวจ Snapshot เอกสาร</a> ก่อน</p>
+      <p id="medicine-clear-warning" class="tor-modal-hint" role="status" hidden></p>
       <p id="medicine-clear-error" class="tor-modal-error" role="alert" hidden></p>
       <label class="tor-clear-ack"><input type="checkbox" name="backup_ack" value="1" required><span>สำรองข้อมูลแล้ว และเข้าใจว่ารายการยาและคุณลักษณะทั้งหมดจะถูกลบ</span></label>
       <label><span>พิมพ์คำว่า ล้างรายการยา เพื่อยืนยัน</span><input name="confirm_phrase" required autocomplete="off" maxlength="32" placeholder="ล้างรายการยา"></label>
@@ -727,6 +729,6 @@ document.querySelectorAll('.admin-panel').forEach((panel) => {
   </div>
 </dialog>
 <script src="assets/admin-import.js?v=1202"></script>
-<script src="assets/admin-modal.js?v=1205"></script>
+<script src="assets/admin-modal.js?v=1300"></script>
 </body>
 </html>

@@ -46,3 +46,7 @@
 ดาวน์โหลด Excel Template ผ่าน Admin; ไฟล์อยู่ `templates/import/` มี 3 ชีต โดยกรอกเฉพาะชีตแรก `Import` แถว 2 เป็นต้นไป. ตัวอย่างราคาเป็นข้อมูลสมมุติ ไม่ใช่ราคากลางจริง. เพิ่ม/แก้ไข/นำเข้าใช้ Popup; Preview/confirm เดิมยังบังคับทุกครั้ง.
 
 ราคากลางประจำปี: ปุ่มล้างราคากลางทั้งหมดแยกจาก Import ในหน้า Admin; ต้องสำรองและยืนยันจำนวน/คำยืนยันก่อนล้าง. หากต้องการให้คลังไม่ว่างระหว่างอัปเดต ให้ใช้ Import แบบแทนที่ทั้งหมดแทน. ไม่ต้อง migration.
+
+## การพัฒนาล่าสุด v1.3.0 (candidate)
+
+Git baseline ก่อนรอบนี้คือ v1.2.0 `fced437f022f07924ca163141b02a14c4f176b5c`; DB baseline v1.1.0 และประวัติด้านบนยังใช้เป็นอ้างอิง. เพิ่ม [Document Snapshot](docs/DOCUMENT_SNAPSHOT.md): เอกสารหัวข้อ 1 และ TOR อ้างอิงข้อมูลที่บันทึก ไม่ดึงชื่อ/คุณลักษณะจากคลังปัจจุบันเมื่อเปิดย้อนหลัง; Word รวมส่งข้อมูล archive โดยคง merge V4. หน้า Admin → ตรวจ Snapshot เอกสาร รองรับ explicit backfill เฉพาะหลักฐานที่ยืนยันได้ แล้วตรวจ readiness ก่อนล้างคลัง. ไม่มี migration. ดู [IMPORT_SYSTEM](docs/IMPORT_SYSTEM.md), [PROJECT_STATUS](docs/PROJECT_STATUS.md). ยังรอ UAT บน MySQL/Word จริง; อย่า deploy ก่อนผ่าน gate.

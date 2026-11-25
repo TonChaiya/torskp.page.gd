@@ -21,7 +21,7 @@
     const sync=()=>{form.querySelector('[type="submit"]').disabled=submitting||!ready();};
     async function load(){
       const ticket=++generation;submitting=false;blocked=true;form.reset();form.elements.snapshot_hash.value='';form.elements.expected_count.value='';sync();
-      count.textContent='กำลังตรวจสอบ…';error.hidden=true;
+      count.textContent='กำลังตรวจสอบ…';error.hidden=true;const warning=document.getElementById(prefix+'-clear-warning');if(warning)warning.hidden=true;
       try{
         const response=await fetch('admin.php?action='+prefix+'_clear_preview',{cache:'no-store',credentials:'same-origin'});
         const data=await response.json();
@@ -31,6 +31,7 @@
         form.elements.snapshot_hash.value=data.hash;form.elements.expected_count.value=String(data.count);
         count.textContent=data.count.toLocaleString('th-TH')+' รายการ';
         if(blocked){error.textContent=data.blocked||'ไม่มีข้อมูลให้ล้าง';error.hidden=false;}
+        if(warning&&data.deferred>0){warning.textContent='มี '+data.deferred+' รายการในหัวข้อ 1 ที่ไม่มีคุณลักษณะตรง TOR เดิม แต่เอกสารที่บันทึกใช้ข้อมูลของตนเองครบแล้ว หากสร้าง TOR ใหม่จากหัวข้อ 1 ต้องเลือกยาจากคลังใหม่';warning.hidden=false;}
       }catch(e){if(ticket!==generation||!dialog.open)return;count.textContent='ไม่ทราบจำนวน';error.textContent='ตรวจสอบข้อมูลไม่สำเร็จ กรุณาปิดแล้วเปิดหน้าต่างใหม่';error.hidden=false;}
       sync();
     }

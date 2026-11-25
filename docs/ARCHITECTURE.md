@@ -77,3 +77,6 @@ flowchart TD
 `assets/admin-modal.js` จัดการ dialog, เพิ่ม/แก้ไขจากผลค้นหา, ปิด/ยกเลิกอย่างปลอดภัย; `assets/admin-import.css` จัด layout และ scroll. `templates/import/*.xlsx` เป็น template แยกประเภท 3 ชีต; endpoint sample เดิมส่งไฟล์นี้และ fallback เป็น generator เดิมเมื่อไม่มีไฟล์. ตัวอ่านรองรับ SpreadsheetML default และ prefixed namespace.
 
 ส่วน annual price reset: `admin.php` GET `price_clear_preview` และ POST `clear_price_refs` → `core/catalog_import.php` (`torClearPricePreview`, `torClearPriceReferences`) → เฉพาะ `medicine_price_references`; popup ใช้ `assets/admin-modal.js` และ `assets/admin-import.css` เดิม. ไม่แก้ TOR/Word/history.
+
+## v1.3.0 candidate — archive selection
+`core/document_snapshot.php` เป็น contract ของ snapshot, audit/backfill และ selection keys. `principle_approval_memo.php` ใช้ case-owned name/unit; `tor_company_purchase.php` ใช้ h/c keys กับ history/case rows, live list แยก; `assets/history-bundle.js` hydrate TOR ด้วย archive key. `catalog_snapshot_review.php` เป็น Admin read-only review และ explicit transactional recovery. `core/medicine_catalog_tools.php` ใช้ readiness audit สำหรับ clear. ไม่แก้ merge engine/Word renderer/ตารางฐาน; รายละเอียดและข้อจำกัด [DOCUMENT_SNAPSHOT.md](DOCUMENT_SNAPSHOT.md).

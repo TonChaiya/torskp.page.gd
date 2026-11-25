@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/core/config.php';
 require __DIR__ . '/core/procurement_case.php';
+require_once __DIR__ . '/core/document_snapshot.php';
 require __DIR__ . '/core/word_export_lib.php';
 require __DIR__ . '/core/auth.php';
 require __DIR__ . '/core/document_signer_defaults.php';
@@ -388,7 +389,7 @@ function principleFilenameDate(string $docDate): string
 $medicines = [];
 $loadError = '';
 try {
-    $medicines = db()->query('SELECT id, name, unit FROM medicines ORDER BY name')->fetchAll();
+    $medicines = db()->query('SELECT id, name, unit, specification FROM medicines ORDER BY name')->fetchAll();
 } catch (Throwable $e) {
     $loadError = 'ยังอ่านรายการยาจากฐานข้อมูลไม่ได้ กรุณาตรวจสอบ config.php และฐานข้อมูล tor_report';
 }
@@ -569,6 +570,8 @@ if ($activeCase && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && !empty($ac
 }
 
 $defaultItems = [];
+$principleSnapshotError = '';
+$caseSnapshotRows = is_array($activeCase['items'] ?? null) ? $activeCase['items'] : [];
 $submittedMedicineIds = $_POST['medicine_id'] ?? $_GET['medicine_id'] ?? [];
 $submittedMedicineNames = $_POST['medicine_name'] ?? $_GET['medicine_name'] ?? [];
 $submittedQuantities = $_POST['quantity'] ?? $_GET['quantity'] ?? [];
@@ -580,30 +583,55 @@ if (is_array($submittedMedicineIds) || is_array($submittedMedicineNames)) {
     $submittedUnits = is_array($submittedUnits) ? $submittedUnits : [];
     $maxItems = max(count($submittedMedicineIds), count($submittedMedicineNames), count($submittedQuantities), count($submittedUnits));
     for ($i = 0; $i < $maxItems; $i++) {
-        $medicineId = trim((string) ($submittedMedicineIds[$i] ?? ''));
-        $medicine = $medicineMap[$medicineId] ?? null;
-        $name = $medicine ? (string) $medicine['name'] : trim((string) ($submittedMedicineNames[$i] ?? ''));
+        $selectionKey = trim((string) ($submittedMedicineIds[$i] ?? ''));
+        $submittedName = trim((string) ($submittedMedicineNames[$i] ?? ''));
         $quantity = thaiDigits(trim((string) ($submittedQuantities[$i] ?? '')));
-        $unit = thaiDigits(trim((string) ($submittedUnits[$i] ?? ($medicine['unit'] ?? ''))));
-        if ($name === '' && $quantity === '' && $unit === '') {
-            continue;
+        $unit = thaiDigits(trim((string) ($submittedUnits[$i] ?? '')));
+        $medicineId = '';
+        $saved = null;
+        $medicine = null;
+        if (str_starts_with($selectionKey,'c:')) {
+            $saved = torSnapshotKeyRow('c',$caseId,$selectionKey,$caseSnapshotRows);
+            if (!$saved) $principleSnapshotError = 'รายการที่บันทึกไว้เปลี่ยนแล้ว กรุณาโหลดชุดเอกสารใหม่ก่อนบันทึกหรือส่งออก';
+        } elseif ($selectionKey !== '') {
+            $medicine = $medicineMap[$selectionKey] ?? null;
+            if (!$medicine || ($submittedName !== '' && torSnapshotComparable($medicine['name']) !== torSnapshotComparable($submittedName))) {
+                $principleSnapshotError = 'รายการยาในคลังเปลี่ยนแล้ว กรุณาโหลดใหม่และเลือกรายการที่ต้องการ';
+                $medicine = null;
+            }
         }
-        $defaultItems[] = [
-            'medicine_id' => $medicineId,
-            'name' => $name,
-            'quantity' => $quantity,
-            'unit' => $unit,
-        ];
+        $name = $submittedName;
+        $item = [];
+        if ($saved) {
+            // Old name/unit are authoritative unless the user explicitly edits the text.
+            if (torSnapshotComparable($submittedName) === torSnapshotComparable($saved['name']??'') && torSnapshotComparable($unit) === torSnapshotComparable($saved['unit']??'')) {
+                $item=$saved; $name=(string)$saved['name']; $medicineId=(string)($saved['medicine_id']??'');
+            }
+        } elseif ($medicine) {
+            $name=(string)$medicine['name']; $medicineId=(string)$medicine['id'];
+            if ($unit==='') $unit=thaiDigits((string)$medicine['unit']);
+            if (torSnapshotComparable($unit)===torSnapshotComparable($medicine['unit']) && torSnapshotHasSpec($medicine)) {
+                $item['specification']=$medicine['specification']; $item['snapshot_source']='selected_catalog_at_save';
+            }
+        }
+        if ($name === '' && $quantity === '' && $unit === '') continue;
+        $item['medicine_id']=$medicineId;
+        $item['name']=$name;
+        $item['quantity']=$quantity;
+        $item['unit']=$unit;
+        $item['selection_key']=$selectionKey;
+        $defaultItems[]=$item;
     }
 }
 if (!$defaultItems && $activeCase && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && !empty($activeCase['items'])) {
-    foreach ($activeCase['items'] as $item) {
-        $defaultItems[] = [
-            'medicine_id' => (string) ($item['medicine_id'] ?? ''),
-            'name' => (string) ($item['name'] ?? ''),
-            'quantity' => thaiDigits((string) ($item['quantity'] ?? '')),
-            'unit' => thaiDigits((string) ($item['unit'] ?? '')),
-        ];
+    foreach ($activeCase['items'] as $i=>$item) {
+        $row=$item;
+        $row['medicine_id']=(string)($item['medicine_id']??'');
+        $row['name']=(string)($item['name']??'');
+        $row['quantity']=thaiDigits((string)($item['quantity']??''));
+        $row['unit']=thaiDigits((string)($item['unit']??''));
+        $row['selection_key']=torSnapshotKey('c',$caseId,$i,$item);
+        $defaultItems[]=$row;
     }
 }
 if (!$defaultItems) {
@@ -617,9 +645,9 @@ if (!$defaultItems) {
     ];
 }
 $itemCount = thaiDigits((string) count($defaultItems));
-$saveError = '';
+$saveError = $principleSnapshotError;
 
-if (($_POST['action'] ?? '') === 'word') {
+if (($_POST['action'] ?? '') === 'word' && $saveError === '') {
     $principleWordData = [
         'department' => $department,
         'memo_no_suffix' => $memoNoSuffix,
@@ -652,7 +680,7 @@ if (($_POST['action'] ?? '') === 'word') {
     }
 }
 
-if (($_POST['action'] ?? '') === 'save_case') {
+if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
     $normalizedFiscalYear = arabicDigits(trim($fiscalYear));
     if (!preg_match('/^2[4-9][0-9]{2}$/', $normalizedFiscalYear)) {
         $saveError = 'กรุณาระบุปีงบประมาณ พ.ศ. เป็นตัวเลข 4 หลัก เช่น 2570';
@@ -689,7 +717,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
         'signer_position' => $signerPosition,
         'director_name' => $directorName,
         'director_position' => $directorPosition,
-        'items' => $defaultItems,
+        'items' => array_map(static function(array $row): array { unset($row['selection_key']); return $row; }, $defaultItems),
         'committee' => $committee,
     ]);
     saveProcurementDocument($caseId, 'principle_approval', $memoNoSuffix, $docDate);
@@ -934,7 +962,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
                             <div class="grid gap-2 xl:grid-cols-[minmax(0,1fr)_5.5rem_6rem_auto] xl:items-end">
                                 <label class="block min-w-0">
                                     <span class="text-xs text-zinc-400">ชื่อยา</span>
-                                    <input type="hidden" name="medicine_id[]" class="medicine-id" value="<?= h($item['medicine_id']) ?>">
+                                    <input type="hidden" name="medicine_id[]" class="medicine-id" value="<?= h((string)($item['selection_key'] ?? $item['medicine_id'])) ?>">
                                     <input type="text" name="medicine_name[]" class="medicine-search mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-emerald-400" value="<?= h($item['name']) ?>" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
                                     <div class="medicine-results hidden max-h-52 overflow-auto rounded-md border border-zinc-700 bg-zinc-950"></div>
                                 </label>
@@ -1185,7 +1213,7 @@ if (($_POST['action'] ?? '') === 'save_case' && $saveError === '') {
 </div>
 <script src="assets/js/word_export.js"></script>
 <script>
-const medicines = <?= json_encode($medicines, JSON_UNESCAPED_UNICODE) ?>;
+const medicines = <?= json_encode(array_map(static function(array $m): array { unset($m['specification']); return $m; }, $medicines), JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
 let committeeSets = <?= json_encode(array_column($committeeSets, null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
 const fallbackMedicine = <?= json_encode($fallbackMedicine, JSON_UNESCAPED_UNICODE) ?>;
 const thaiDigits = (value) => String(value ?? '').replace(/[0-9]/g, (digit) => String.fromCharCode(0x0E50 + Number(digit)));
@@ -1660,7 +1688,6 @@ function showMedicineResults(row, query) {
     const matches = medicines
         .filter((medicine) => arabicDigits(`${medicine.name || ''} ${medicine.unit || ''}`).toLocaleLowerCase('th-TH').includes(term))
         .slice(0, 12);
-    hidden.value = '';
     results.innerHTML = matches.length ? matches.map((medicine) => `
         <button type="button" class="medicine-choice block w-full border-b border-zinc-800 px-3 py-2 text-left text-sm hover:bg-emerald-500/10" data-id="${escapeHtml(medicine.id)}">
             <span class="block text-zinc-100">${escapeHtml(medicine.name)}</span>
@@ -1746,7 +1773,7 @@ function bindMedicineRow(row) {
             renderMedicineItems();
         });
     });
-    row.querySelector('.medicine-search')?.addEventListener('input', (event) => showMedicineResults(row, event.target.value));
+    row.querySelector('.medicine-search')?.addEventListener('input', (event) => { row.querySelector('.medicine-id').value=''; showMedicineResults(row, event.target.value); });
     row.querySelector('.medicine-search')?.addEventListener('focus', (event) => showMedicineResults(row, event.target.value));
     row.querySelector('.medicine-search')?.addEventListener('keydown', (event) => handleMedicineSearchKeydown(row, event));
     row.querySelector('.medicine-results')?.addEventListener('click', (event) => {

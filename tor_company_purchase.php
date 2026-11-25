@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/core/config.php';
 require_once __DIR__ . '/core/procurement_case.php';
+require_once __DIR__ . '/core/document_snapshot.php';
 require_once __DIR__ . '/core/word_export_lib.php';
 require_once __DIR__ . '/core/auth.php';
 requireLogin();
@@ -300,6 +301,7 @@ function saveTorHistory(array $committee, array $items, string $priceSource, int
         'unit' => (string) ($item['medicine']['unit'] ?? ''),
         'specification' => (string) ($item['medicine']['specification'] ?? ''),
         'medicine_id' => (int) ($item['medicine']['id'] ?? 0),
+        'snapshot_source' => 'saved_tor',
         'quantity' => (float) $item['quantity'],
         'requested_quantity' => (float) ($item['requested_quantity'] ?? $item['quantity']),
         'package_size' => (float) ($item['package_size'] ?? 0),
@@ -327,6 +329,7 @@ function updateTorHistory(int $id, array $committee, array $items, string $price
         'unit' => (string) ($item['medicine']['unit'] ?? ''),
         'specification' => (string) ($item['medicine']['specification'] ?? ''),
         'medicine_id' => (int) ($item['medicine']['id'] ?? 0),
+        'snapshot_source' => 'saved_tor',
         'quantity' => (float) $item['quantity'],
         'requested_quantity' => (float) ($item['requested_quantity'] ?? $item['quantity']),
         'package_size' => (float) ($item['package_size'] ?? 0),
@@ -335,13 +338,14 @@ function updateTorHistory(int $id, array $committee, array $items, string $price
         'offer_price' => (float) $item['offer_price'],
         'offer_total' => (float) $item['offer_total'],
     ], $items);
-    $stmt = db()->prepare('UPDATE tor_histories SET case_id = ?, committee_json = ?, items_json = ?, price_source = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    $stmt = db()->prepare('UPDATE tor_histories SET case_id = ?, committee_json = ?, items_json = ?, price_source = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (case_id <=> ?)');
     $stmt->execute([
         $caseId > 0 ? $caseId : null,
         json_encode(array_values($committee), JSON_UNESCAPED_UNICODE),
         json_encode($historyItems, JSON_UNESCAPED_UNICODE),
         $priceSource,
         $id,
+        $caseId > 0 ? $caseId : null,
     ]);
 }
 
@@ -502,7 +506,7 @@ function selectedDraft(array $drafts, int $id): ?array
 
 function reportItems(array $medicines, array $procurementCases = []): array
 {
-    global $packageValidationError;
+    global $packageValidationError, $torSnapshotSelections, $torExtraRows;
     $packageValidationError = '';
     $medicineMap = mapById($medicines);
     $ids = $_POST['medicine_id'] ?? [];
@@ -514,6 +518,15 @@ function reportItems(array $medicines, array $procurementCases = []): array
     $packageMode = post('package_mode') === '1';
     $sourceQuantityByMedicineId = [];
     $caseId = (int) post('case_id');
+    $reportId = (int) post('report_id');
+    if ($caseId>0 && !in_array($caseId,array_map(static fn($c)=>(int)$c['id'],$procurementCases),true)) { $packageValidationError='ไม่พบชุดจัดซื้อ'; return []; }
+    $linked=(int)($torExtraRows[$caseId]['history_id']??0);
+    if ($linked>0 && $linked!==$reportId) { $packageValidationError='ประวัติ TOR ที่เลือกไม่ตรงเอกสารที่บันทึก กรุณาโหลดใหม่'; return []; }
+    if ($reportId > 0) {
+        $history = null;
+        foreach (($GLOBALS['data']['histories'] ?? []) as $candidate) if ((int)$candidate['id'] === $reportId) { $history = $candidate; break; }
+        if (!$history || (int)($history['case_id'] ?? 0) !== $caseId) { $packageValidationError = 'ประวัติ TOR ไม่ตรงชุดจัดซื้อ'; return []; }
+    }
     if ($packageMode && $caseId > 0) {
         foreach ($procurementCases as $case) {
             if ((int) ($case['id'] ?? 0) !== $caseId) continue;
@@ -531,18 +544,27 @@ function reportItems(array $medicines, array $procurementCases = []): array
 
     $max = max(count($ids), count($quantities), count($refs), count($offers), 1);
     for ($i = 0; $i < $max; $i++) {
-        $id = (int) ($ids[$i] ?? 0);
-        if (!$id || !isset($medicineMap[$id])) continue;
+        $key = (string)($ids[$i] ?? '');
+        if ($key === '') {
+            if (trim((string)($_POST['medicine_label'][$i] ?? '')) !== '' || (float)normalizeNumberInput($quantities[$i] ?? 0)>0 || (float)normalizeNumberInput($refs[$i] ?? 0)>0 || (float)normalizeNumberInput($offers[$i] ?? 0)>0) { $packageValidationError='กรุณาเลือกรายการยาให้ครบ แถว '.($i+1); return []; }
+            continue;
+        }
+        try { $medicine = torSnapshotResolveSelection($key,$caseId,$reportId,$medicineMap,$torSnapshotSelections['medicines'] ?? []); }
+        catch (RuntimeException $e) { $packageValidationError='แถว '.($i+1).': '.$e->getMessage(); return []; }
+        if (($medicine['source']??'')==='live') {
+            if (!isset($_POST['medicine_label'][$i]) || torSnapshotComparable($_POST['medicine_label'][$i])!==torSnapshotComparable($medicine['name']) || !torSnapshotHasIdentity($medicine) || !torSnapshotHasSpec($medicine)) { $packageValidationError='แถว '.($i+1).': รายการยาในคลังเปลี่ยนหรือคุณลักษณะไม่ครบ กรุณาเลือกใหม่'; return []; }
+        }
+        $id=(int)$medicine['id'];
 
         $quantity = max(0, (float) normalizeNumberInput($quantities[$i] ?? 0));
         $requestedQuantity = max(0, (float) normalizeNumberInput($requestedQuantities[$i] ?? $quantity));
-        if (isset($sourceQuantityByMedicineId[$id])) {
+        if (($medicine['source'] ?? '') !== 'history' && isset($sourceQuantityByMedicineId[$id])) {
             $requestedQuantity = $sourceQuantityByMedicineId[$id];
         }
         $packageSize = $packageMode ? max(0, (float) normalizeNumberInput($packageSizes[$i] ?? 0)) : 0;
         $packageCount = 0;
         if ($packageMode) {
-            $medicineName = (string) ($medicineMap[$id]['name'] ?? ('ลำดับที่ ' . ($i + 1)));
+            $medicineName = (string) ($medicine['name'] ?? ('ลำดับที่ ' . ($i + 1)));
             if ($requestedQuantity <= 0 || $packageSize <= 0) {
                 $packageValidationError = 'กรุณากรอกขนาดบรรจุให้ครบ และจำนวนตั้งต้นต้องมากกว่า 0: ' . $medicineName;
             } else {
@@ -560,7 +582,7 @@ function reportItems(array $medicines, array $procurementCases = []): array
         $offerPrice = max(0, (float) normalizeNumberInput($offers[$i] ?? 0));
         $pricedQuantity = $quantity;
         $items[] = [
-            'medicine' => $medicineMap[$id],
+            'medicine' => $medicine,
             'quantity' => $quantity,
             'requested_quantity' => $requestedQuantity,
             'package_size' => $packageSize,
@@ -958,6 +980,8 @@ try {
     $error = 'ยังเชื่อมต่อฐานข้อมูลไม่ได้ กรุณาสร้างฐานข้อมูลด้วย schema.sql และตรวจค่าใน config.php';
 }
 
+$torSnapshotSelections = torSnapshotSelections($data['procurement_cases'], $data['histories']);
+
 // Reuse the existing TOR document's extra_json; no schema change is required.
 $torBudgetRows = [];
 $torPriceBasisRows = [];
@@ -1198,7 +1222,7 @@ foreach ($data['histories'] as $h) {
         <form method="post" class="space-y-5" autocomplete="off">
             <input type="hidden" name="action" value="report">
             <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
-            <input type="hidden" name="report_id" id="report_id" value="">
+            <input type="hidden" name="report_id" id="report_id" value="<?= (int)($_POST['report_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="case_id" id="case_id" value="<?= (int) $selectedCaseId ?>">
             <input type="hidden" name="package_mode" id="package_mode" value="<?= $postedPackageMode ? '1' : '0' ?>">
 
@@ -1340,14 +1364,15 @@ foreach ($data['histories'] as $h) {
                     $medicineMap = mapById($data['medicines']);
                     $rowCount = max(count((array) $postedMedicineIds), 1);
                     for ($i = 0; $i < $rowCount; $i++):
-                        $selectedMedicine = $medicineMap[(int) ($postedMedicineIds[$i] ?? 0)] ?? null;
+                        $selectionKey = (string)($postedMedicineIds[$i] ?? '');
+                        $selectedMedicine = $torSnapshotSelections['medicines'][$selectionKey] ?? $medicineMap[(int)$selectionKey] ?? null;
                     ?>
                         <tr>
                             <td class="px-3 py-2 text-right text-zinc-400"><?= $i + 1 ?></td>
                             <td class="px-3 py-2">
                                 <div class="medicine-picker relative">
-                                    <input type="hidden" name="medicine_id[]" class="medicine-select" value="<?= (int) ($postedMedicineIds[$i] ?? 0) ?: '' ?>">
-                                    <input type="text" class="medicine-search w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 outline-none focus:border-emerald-400" value="<?= h($selectedMedicine['name'] ?? '') ?>" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
+                                    <input type="hidden" name="medicine_id[]" class="medicine-select" value="<?= h($selectionKey) ?>">
+                                    <input type="text" name="medicine_label[]" class="medicine-search w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 outline-none focus:border-emerald-400" value="<?= h((string)($_POST['medicine_label'][$i] ?? $selectedMedicine['name'] ?? '')) ?>" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
                                     <div class="medicine-results absolute left-0 right-0 top-full z-50 mt-1 hidden max-h-64 overflow-auto rounded-md border border-zinc-700 bg-zinc-950 shadow-xl"></div>
                                 </div>
                             </td>
@@ -1363,11 +1388,11 @@ foreach ($data['histories'] as $h) {
                             </td>
                             <td class="px-3 py-2">
                                 <div class="flex gap-1">
-                                    <input name="reference_price[]" type="number" step="0.01" value="<?= h(normalizeNumberInput($postedRef[$i] ?? '')) ?>" class="calc-input reference min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400">
+                                    <input name="reference_price[]" type="number" step="any" value="<?= h(normalizeNumberInput($postedRef[$i] ?? '')) ?>" class="calc-input reference min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400">
                                     <button type="button" class="price-search-btn rounded-md border border-zinc-700 px-2 py-2 text-zinc-200 hover:border-emerald-400" title="ค้นหาราคายาอ้างอิง">🔍</button>
                                 </div>
                             </td>
-                            <td class="px-3 py-2"><input name="offer_price[]" type="number" step="0.01" value="<?= h(normalizeNumberInput($postedOffer[$i] ?? '')) ?>" class="calc-input offer w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400"></td>
+                            <td class="px-3 py-2"><input name="offer_price[]" type="number" step="any" value="<?= h(normalizeNumberInput($postedOffer[$i] ?? '')) ?>" class="calc-input offer w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400"></td>
                             <td class="px-3 py-2 text-center">
                                 <button type="button" class="remove-row-btn rounded-md border border-red-700 px-2 py-1 text-red-300 hover:bg-red-700/10">✕</button>
                             </td>
@@ -1477,12 +1502,17 @@ foreach ($data['histories'] as $h) {
     </div>
 </div>
 <script>
-const medicines = <?= json_encode(array_column($data['medicines'], null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
+const medicines = <?= json_encode(array_column($data['medicines'], null, 'id'), JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
+const snapshotMedicines = <?= json_encode((object)$torSnapshotSelections['medicines'], JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
+const historySnapshotKeys = <?= json_encode((object)$torSnapshotSelections['history_keys'], JSON_HEX_TAG) ?>;
+const caseSnapshotKeys = <?= json_encode((object)$torSnapshotSelections['case_keys'], JSON_HEX_TAG) ?>;
+const savedTorHistoryIds = <?= json_encode((object)array_map(static fn($x)=>(int)($x['history_id']??0),$torExtraRows), JSON_HEX_TAG) ?>;
+function medicineForKey(key) { return snapshotMedicines[key] || medicines[key]; }
 const medicineList = Object.entries(medicines).map(([id, item]) => ({ id, ...item }));
 const drafts = <?= json_encode(array_column($data['drafts'], null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
 const committeeSets = <?= json_encode(array_column($data['committee_sets'], null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
-const histories = <?= json_encode(array_column($uniqueHistories, null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
-const procurementCases = <?= json_encode(array_column($data['procurement_cases'], null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
+const histories = <?= json_encode(array_column($data['histories'], null, 'id'), JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
+const procurementCases = <?= json_encode(array_column($data['procurement_cases'], null, 'id'), JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
 const torAllocatedBudgets = <?= json_encode((object) $torBudgetRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const torDefaultAllocatedBudget = <?= json_encode(TOR_DEFAULT_ALLOCATED_BUDGET) ?>;
 const torPlanRows = <?= json_encode((object) $torPlanRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
@@ -1675,6 +1705,8 @@ function hideMedicineResults(row) {
 function selectMedicine(row, medicine) {
     row.querySelector('.medicine-select').value = medicine.id;
     row.querySelector('.medicine-search').value = medicine.name;
+    row.querySelector('.medicine-search').removeAttribute('aria-invalid');
+    row.querySelector('.medicine-search').removeAttribute('title');
     hideMedicineResults(row);
     updatePage();
 }
@@ -1732,7 +1764,7 @@ function searchMedicines(row, query) {
     const results = row.querySelector('.medicine-results');
     const term = arabicDigits(query.trim()).toLocaleLowerCase('th-TH');
 
-    if (arabicDigits(medicines[hidden.value]?.name || '') !== arabicDigits(input.value)) {
+    if (arabicDigits(medicineForKey(hidden.value)?.name || '') !== arabicDigits(input.value)) {
         hidden.value = '';
     }
     if (term.length < 3) {
@@ -1820,7 +1852,7 @@ function updatePage() {
         const qty = n(row.querySelector('.quantity'));
         const ref = n(row.querySelector('.reference'));
         const offer = n(row.querySelector('.offer'));
-        const med = medicines[row.querySelector('.medicine-select').value];
+        const med = medicineForKey(row.querySelector('.medicine-select').value);
         const pricedQty = qty;
         refTotal += pricedQty * ref;
         offerTotal += pricedQty * offer;
@@ -1863,18 +1895,18 @@ document.getElementById('add_row')?.addEventListener('click', () => {
         <td class="px-3 py-2">
             <div class="medicine-picker relative">
                 <input type="hidden" name="medicine_id[]" class="medicine-select">
-                <input type="text" class="medicine-search w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 outline-none focus:border-emerald-400" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
+                <input type="text" name="medicine_label[]" class="medicine-search w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 outline-none focus:border-emerald-400" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
                 <div class="medicine-results absolute left-0 right-0 top-full z-50 mt-1 hidden max-h-64 overflow-auto rounded-md border border-zinc-700 bg-zinc-950 shadow-xl"></div>
             </div>
         </td>
         <td class="quantity-cell px-3 py-2">${quantityCellHtml()}</td>
         <td class="px-3 py-2">
             <div class="flex gap-1">
-                <input name="reference_price[]" type="number" step="0.01" class="calc-input reference min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400">
+                <input name="reference_price[]" type="number" step="any" class="calc-input reference min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400">
                 <button type="button" class="price-search-btn rounded-md border border-zinc-700 px-2 py-2 text-zinc-200 hover:border-emerald-400" title="ค้นหาราคายาอ้างอิง">🔍</button>
             </div>
         </td>
-        <td class="px-3 py-2"><input name="offer_price[]" type="number" step="0.01" class="calc-input offer w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400"></td>
+        <td class="px-3 py-2"><input name="offer_price[]" type="number" step="any" class="calc-input offer w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400"></td>
         <td class="px-3 py-2 text-center">
             <button type="button" class="remove-row-btn rounded-md border border-red-700 px-2 py-1 text-red-300 hover:bg-red-700/10">✕</button>
         </td>
@@ -1904,7 +1936,7 @@ document.querySelector('form[method="post"].space-y-5')?.addEventListener('submi
 document.querySelectorAll('#medicine_rows tr').forEach(bindRow);
 document.getElementById('toggle_package_mode')?.addEventListener('click', () => setPackageMode(!packageMode));
 setPackageMode(packageMode);
-if (isPageReload()) {
+if (<?= ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? 'true' : 'false' ?> && isPageReload()) {
     setTimeout(clearMainFormForReload, 0);
 }
 document.addEventListener('click', (event) => {
@@ -1930,6 +1962,8 @@ function findHistoryById(id) {
 
 function findHistoryByCaseId(caseId) {
     if (!caseId) return null;
+    const savedId = savedTorHistoryIds[caseId];
+    if (savedId) { const h=findHistoryById(savedId); return h && String(h.case_id)===String(caseId) ? h : null; }
     let matched = null;
     for (const k in histories) {
         if (String(histories[k].case_id || '') === String(caseId)) {
@@ -1962,18 +1996,18 @@ function loadHistoryIntoForm(h, sourceLabel = '') {
                 <td class="px-3 py-2">
                     <div class="medicine-picker relative">
                         <input type="hidden" name="medicine_id[]" class="medicine-select">
-                        <input type="text" class="medicine-search w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 outline-none focus:border-emerald-400" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
+                        <input type="text" name="medicine_label[]" class="medicine-search w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 outline-none focus:border-emerald-400" placeholder="พิมพ์ชื่อยาอย่างน้อย 3 ตัว">
                         <div class="medicine-results absolute left-0 right-0 top-full z-50 mt-1 hidden max-h-64 overflow-auto rounded-md border border-zinc-700 bg-zinc-950 shadow-xl"></div>
                     </div>
                 </td>
                 <td class="quantity-cell px-3 py-2">${quantityCellHtml()}</td>
                 <td class="px-3 py-2">
                     <div class="flex gap-1">
-                        <input name="reference_price[]" type="number" step="0.01" class="calc-input reference min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400">
+                        <input name="reference_price[]" type="number" step="any" class="calc-input reference min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400">
                         <button type="button" class="price-search-btn rounded-md border border-zinc-700 px-2 py-2 text-zinc-200 hover:border-emerald-400" title="ค้นหาราคายาอ้างอิง">🔍</button>
                     </div>
                 </td>
-                <td class="px-3 py-2"><input name="offer_price[]" type="number" step="0.01" class="calc-input offer w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400"></td>
+                <td class="px-3 py-2"><input name="offer_price[]" type="number" step="any" class="calc-input offer w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-right outline-none focus:border-emerald-400"></td>
                 <td class="px-3 py-2 text-center">
                     <button type="button" class="remove-row-btn rounded-md border border-red-700 px-2 py-1 text-red-300 hover:bg-red-700/10">✕</button>
                 </td>
@@ -1982,24 +2016,15 @@ function loadHistoryIntoForm(h, sourceLabel = '') {
             body.appendChild(row);
             bindRow(row);
 
-            const medName = (it.name || '').trim();
-            let matchedId = it.medicine_id || '';
-            if (matchedId && !medicines[matchedId]) matchedId = '';
-            for (const mid in medicines) {
-                if (matchedId) break;
-                if ((medicines[mid].name || '').trim().toLowerCase() === medName.toLowerCase()) {
-                    matchedId = mid;
-                    break;
-                }
-            }
+            const medName = it.name || '';
+            const key = h.id ? historySnapshotKeys[h.id]?.[idx] : caseSnapshotKeys[h.case_id]?.[idx];
             const select = row.querySelector('.medicine-select');
             const search = row.querySelector('.medicine-search');
-            if (matchedId) {
-                select.value = matchedId;
-                search.value = medicines[matchedId].name || medName;
-            } else {
-                select.value = '';
-                search.value = medName;
+            select.value = key || '';
+            search.value = medName;
+            if (!key || snapshotMedicines[key]?.error) {
+                search.title = snapshotMedicines[key]?.error || 'ไม่พบ Snapshot กรุณาตรวจสอบข้อมูล';
+                search.setAttribute('aria-invalid','true');
             }
             const packageSize = numericInputValue(it.package_size || '');
             const storedQuantity = numericInputValue(it.quantity || '');
@@ -2009,8 +2034,8 @@ function loadHistoryIntoForm(h, sourceLabel = '') {
             row.querySelector('[name="package_size[]"]').value = packageSize;
             const referencePrice = numericInputValue(it.reference_price || '');
             const offerPrice = numericInputValue(it.offer_price || '');
-            row.querySelector('[name="reference_price[]"]').value = referencePrice === '' ? '' : Number(referencePrice || 0).toFixed(2);
-            row.querySelector('[name="offer_price[]"]').value = offerPrice === '' ? '' : Number(offerPrice || 0).toFixed(2);
+            row.querySelector('[name="reference_price[]"]').value = referencePrice;
+            row.querySelector('[name="offer_price[]"]').value = offerPrice;
         });
         renumberRows();
         setPackageMode((items || []).some((item) => Number(numericInputValue(item.package_size || 0)) > 0));
@@ -2066,16 +2091,19 @@ document.getElementById('procurement_case_id')?.addEventListener('change', (e) =
         loadHistoryIntoForm(savedHistory, 'พบรายงาน TOR ที่เคยบันทึกไว้ จึงโหลดข้อมูลเดิมของใบนี้');
         return;
     }
+    if (savedTorHistoryIds[id]) { document.getElementById('medicine_rows').replaceChildren(); setCaseLoadStatus('ไม่พบประวัติ TOR ที่อ้างอิง กรุณาตรวจ Snapshot ก่อน', 'red'); updatePage(); return; }
     const item = procurementCases[id];
     if (item) loadCaseIntoForm(item);
 });
 
 const initialCaseId = document.getElementById('case_id')?.value;
-if (initialCaseId && procurementCases[initialCaseId]) {
+if (<?= ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? 'true' : 'false' ?> && initialCaseId && procurementCases[initialCaseId]) {
     setTimeout(() => {
         const savedHistory = findHistoryByCaseId(initialCaseId);
         if (savedHistory) {
             loadHistoryIntoForm(savedHistory, 'พบรายงาน TOR ที่เคยบันทึกไว้ จึงโหลดข้อมูลเดิมของใบนี้');
+        } else if (savedTorHistoryIds[initialCaseId]) {
+            document.getElementById('medicine_rows').replaceChildren(); setCaseLoadStatus('ไม่พบประวัติ TOR ที่อ้างอิง กรุณาตรวจ Snapshot ก่อน', 'red'); updatePage();
         } else {
             loadCaseIntoForm(procurementCases[initialCaseId]);
         }
@@ -2094,7 +2122,7 @@ document.getElementById('toggle_committee_set_form')?.addEventListener('click', 
 });
 function openPriceReferenceModal(row) {
     activeReferenceInput = row.querySelector('.reference');
-    const selectedMedicine = medicines[row.querySelector('.medicine-select')?.value];
+    const selectedMedicine = medicineForKey(row.querySelector('.medicine-select')?.value);
     const query = priceReferenceQueryFromMedicine(selectedMedicine, row.querySelector('.medicine-search')?.value || '');
     document.getElementById('price_reference_modal').classList.remove('hidden');
     document.getElementById('price_reference_query').value = query;

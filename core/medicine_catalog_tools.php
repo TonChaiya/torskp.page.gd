@@ -1,23 +1,29 @@
 <?php
 declare(strict_types=1);
 
-// A live medicine ID is still needed by old TOR forms. Fail closed if any
-// saved procurement work exists; do not try to infer safety from FK alone.
+require_once __DIR__.'/document_snapshot.php';
+
 function torMedicineClearBlock(PDO $db, bool $lock = false): string
 {
-    foreach (['procurement_cases','procurement_documents','tor_histories','scope_price_approval_memos'] as $table) {
-        $stmt = $db->query("SELECT id FROM `$table` ORDER BY id LIMIT 1" . ($lock ? ' FOR UPDATE' : ''));
-        $exists = $stmt->fetchColumn() !== false;
-        $stmt->closeCursor();
-        if ($exists) return 'มีชุดจัดซื้อหรือเอกสารที่บันทึกไว้ ระบบยังอ้างอิง ID รายการยาเดิม จึงไม่อนุญาตให้ล้างทั้งหมด ให้ส่งออกแล้วใช้ Import แบบเพิ่มและอัปเดตแทน';
-    }
+    $audit=torSnapshotAudit($db,$lock);
+    return torMedicineSnapshotBlock($audit);
+}
+function torMedicineSnapshotBlock(array $audit): string
+{
+    if($audit['issues']) return 'พบข้อมูลเอกสารที่ยังไม่สมบูรณ์ '.count($audit['issues']).' จุด กรุณาเปิดตรวจ Snapshot ก่อนล้าง';
+    if($audit['recoverable']) return 'พบคุณลักษณะที่กู้จาก TOR เดิมได้ '.count($audit['recoverable']).' รายการ กรุณาตรวจและบันทึก Snapshot ก่อนล้าง';
     return '';
+}
+function torMedicineClearHash(string $catalogHash,string $documentHash): string
+{
+    return hash('sha256',$catalogHash.':'.$documentHash);
 }
 function torMedicineClearPreview(PDO $db): array
 {
     torImportSchema($db, 'medicines');
     $snapshot = torImportSnapshot($db, 'medicines');
-    return ['count'=>count($snapshot['ids']), 'hash'=>$snapshot['hash'], 'blocked'=>torMedicineClearBlock($db)];
+    $audit=torSnapshotAudit($db);
+    return ['count'=>count($snapshot['ids']), 'hash'=>torMedicineClearHash($snapshot['hash'],$audit['hash']), 'blocked'=>torMedicineSnapshotBlock($audit), 'deferred'=>count($audit['deferred'])];
 }
 function torClearMedicines(PDO $db, string $hash, int $expected, string $phrase, bool $backupAck): int
 {
@@ -31,10 +37,11 @@ function torClearMedicines(PDO $db, string $hash, int $expected, string $phrase,
     $db->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
     if (!$db->beginTransaction()) throw new RuntimeException('เริ่ม Transaction ไม่สำเร็จ');
     try {
-        $block = torMedicineClearBlock($db, true);
+        $audit=torSnapshotAudit($db,true);
+        $block = torMedicineSnapshotBlock($audit);
         if ($block !== '') throw new RuntimeException($block);
         $current = torImportSnapshot($db, 'medicines', true);
-        if (count($current['ids']) !== $expected || !hash_equals($hash,$current['hash'])) throw new RuntimeException('ข้อมูลรายการยาเปลี่ยนไป กรุณาเปิดหน้าต่างล้างข้อมูลใหม่');
+        if (count($current['ids']) !== $expected || !hash_equals($hash,torMedicineClearHash($current['hash'],$audit['hash']))) throw new RuntimeException('ข้อมูลรายการยาเปลี่ยนไป กรุณาเปิดหน้าต่างล้างข้อมูลใหม่');
         $removed = 0;
         foreach (array_chunk($current['ids'],200) as $ids) {
             $stmt = $db->prepare('DELETE FROM medicines WHERE id IN ('.implode(',',array_fill(0,count($ids),'?')).')');

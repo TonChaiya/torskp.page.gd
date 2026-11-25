@@ -47,3 +47,9 @@
 
 ### Candidate annual price reset
 เพิ่มปุ่มล้างราคากลางทั้งหมดเฉพาะ Admin; ตรวจ count/hash และคำยืนยันก่อน DELETE แบบ transaction. ไม่เปลี่ยน schema/เอกสาร. Fake PDO 65 assertions ผ่าน, MySQL/XLSX และ Production gate ยังรอ UAT.
+
+## Update 25 พ.ย. 2569 — v1.2.0 push / v1.3.0 candidate
+- v1.2.0 Push `fced437f022f07924ca163141b02a14c4f176b5c` เวลา 11:33 ICT; source Import/Popup/Template/hotfix/export/clear อยู่ Git. พบ runtime staging 3 ไฟล์ใน HEAD; ผู้ใช้เลื่อน cleanup ออกไป ห้ามดำเนินการเอง. SQL dump เก่าออกจาก HEAD แล้ว แต่ประวัติยังอยู่; supplier migration อยู่ Git; สถานะ Git เก่าในเนื้อหาก่อนหน้าเป็นประวัติไม่ใช่งานค้างล่าสุด.
+- v1.3.0 Phase 1–4 candidate: archive selection, history-bundle hydrate, admin audit/backfill, safe clear gate. Phase 5: PHP lint + 39 snapshot / 117 import assertions + offline Dev history 17/59, HTML 34 comparisons ผ่าน; **รอ UAT MySQL clone/Word จริง**. ไม่มี migration, ไม่มีการแก้ DB/Production/remote. อ่าน [DOCUMENT_SNAPSHOT.md](DOCUMENT_SNAPSHOT.md) สำหรับข้อจำกัด/ขั้นตอน release. ไม่ใช้เวอร์ชัน candidate เป็นหลักฐานว่าทดสอบ Production แล้ว.
+
+- ตรวจ Chromium แบบ DOM fixture ด้วย `hydrateTor` ตัวจริง: 17 histories / 59 rows, history ID/row token/name/reference price ตรง archive; stale/missing snapshot ถูกปฏิเสธ. ไม่ได้รันการประกอบไฟล์ Word จริง.

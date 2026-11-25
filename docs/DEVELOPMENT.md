@@ -56,3 +56,6 @@ git push origin main
 ## Import v1.2.0 candidate QA
 
 `php tests/catalog_import_test.php` ใช้ fake PDO และไฟล์สมมุติใน system temp เท่านั้น ไม่แตะ DB จริง; หากเปิด extensions XLSX จะเพิ่มการตรวจ sparse cell/shared strings/formula. ต้องทำ manual UAT ตาม [IMPORT_SYSTEM.md](IMPORT_SYSTEM.md) กับ MySQL Dev แยก/สำรองก่อน, ตรวจ PHP limits และ storage access. ไม่อัปโหลด tests/ ไป web root จริง. ไม่ต้อง migrate ฐาน v1.1.0 ที่ตรง schema. ห้ามอ้าง performance mock เป็น performance hosting.
+
+## v1.3.0 candidate — Snapshot UAT
+รัน `php tests/document_snapshot_test.php` และ `php tests/catalog_import_test.php`, lint ไฟล์ PHP/JS ที่แก้; ทดสอบบน MySQL clone จาก backup ไม่ใช่ฐานหลัก. ตรวจ review/read-only, backfill/rollback/stale, เปลี่ยน/ล้าง catalog แล้ว reopen/export 6 ขั้น, Word รวม V4, ตรวจราคา/pack/ข้อความหลายบรรทัดและ import เดิม. อย่าตีความ fake PDO/HTML comparison ว่า MySQL หรือ Word ผ่าน. ไม่มี migration. เงื่อนไขปิด release ใน [DOCUMENT_SNAPSHOT.md](DOCUMENT_SNAPSHOT.md).

@@ -28,7 +28,10 @@ final class FakeDb extends PDO {
     public function inTransaction():bool{return $this->backup!==null;}
     public function key(array $r,bool $price):string{return strtolower($r['name']).($price?'|'.strtolower($r['strength']).'|'.strtolower($r['unit']):'');}
     public function run(string $sql,array $p):array{
-        if(preg_match('/^SELECT id FROM `(procurement_cases|procurement_documents|tor_histories|scope_price_approval_memos)`/', $sql, $m))return [isset($this->documentTables[$m[1]])?[['id'=>1]]:[],0];
+        if(preg_match('/^SELECT id(?:, [^`]+)? FROM `(procurement_cases|procurement_documents|tor_histories|scope_price_approval_memos)`/', $sql, $m)){
+            $row=['id'=>1,'case_id'=>99,'items_json'=>'[]','document_type'=>'tor_company_purchase','extra_json'=>'{}'];
+            return [is_array($this->documentTables[$m[1]]??null)?$this->documentTables[$m[1]]:(isset($this->documentTables[$m[1]])?[$row]:[]),0];
+        }
         if($sql==='SELECT name, unit, specification FROM medicines ORDER BY name, id')return [array_values($this->med),0];
         if(str_contains($sql,'information_schema.KEY_COLUMN_USAGE'))return [[['count'=>$this->inboundFk]],0];
         if(str_contains($sql,'information_schema.TABLES'))return [[['ENGINE'=>'InnoDB']],0];
@@ -156,5 +159,22 @@ try{
     check(torClearMedicines($medDb,$mp['hash'],401,'ล้างรายการยา',true)===401,'medicine clear count');
     check($medDb->med===[]&&$medDb->prices===$oldPrice,'clear medicine only');fails(fn()=>torImportApply($medDb,$mPending,$mMeta,true),'medicine old import invalidated');
     fails(fn()=>torClearMedicines($medDb,$mp['hash'],401,'ล้างรายการยา',true),'medicine clear replay blocked');
+    // New policy: a complete saved case/TOR remains independent when the live catalog is cleared.
+    $safeDb=new FakeDb();
+    $safeDb->med=['current'=>['id'=>77,'name'=>'Current','unit'=>'tablet','specification'=>'New spec']];
+    $safeDb->prices=$oldPrice;
+    $safeDb->documentTables=[
+        'procurement_cases'=>[['id'=>1,'items_json'=>json_encode([['medicine_id'=>77,'name'=>'Old','unit'=>'tablet','quantity'=>2,'specification'=>'Old spec']])]],
+        'tor_histories'=>[['id'=>4,'case_id'=>1,'items_json'=>json_encode([['name'=>'Old','unit'=>'tablet','specification'=>'Old spec','quantity'=>2,'reference_price'=>1.2,'offer_price'=>1.1,'offer_total'=>2.2]])]],
+        'procurement_documents'=>[['id'=>3,'case_id'=>1,'document_type'=>'tor_company_purchase','extra_json'=>'{"history_id":4}']],
+    ];
+    $safeDocs=$safeDb->documentTables;$safePreview=torMedicineClearPreview($safeDb);
+    check($safePreview['blocked']===''&&$safePreview['count']===1,'complete snapshot allows clear preview');
+    $safeDb->documentTables['procurement_cases'][0]['items_json']=str_replace('Old spec','Changed spec',$safeDb->documentTables['procurement_cases'][0]['items_json']);
+    fails(fn()=>torClearMedicines($safeDb,$safePreview['hash'],1,'ล้างรายการยา',true),'document changed after preview blocks clear');
+    check(count($safeDb->med)===1,'stale doc confirmation leaves catalog unchanged');
+    $safeDb->documentTables=$safeDocs;
+    check(torClearMedicines($safeDb,$safePreview['hash'],1,'ล้างรายการยา',true)===1,'clear with complete saved docs');
+    check(!$safeDb->med&&$safeDb->prices===$oldPrice&&$safeDb->documentTables===$safeDocs,'clear preserves archived docs and prices');
     echo "PASS $checks assertions (CSV + fake PDO; not MySQL; see XLSX skip above)\n";
 }finally{foreach($dirs as $d)torImportClean($d);@rmdir($root);}

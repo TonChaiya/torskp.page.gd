@@ -47,3 +47,8 @@ TOR field ใหม่ `tor_allocated_budget`, `tor_budget_revision`, `tor_fisca
 ## วิธี QA ที่จำเป็นเมื่อแก้ export
 
 สร้างจาก case เดียวกับรายการยา/ราคา/กรรมการเหมือนกัน; ดาวน์โหลด Word 6 ไฟล์และรวม; ตรวจ DOCX package (zip integrity, XML well-formed, relationship targets, Section, fonts, paragraph/table properties) และเปิดใน MS Word Desktop; เปรียบเทียบทุกหน้าแบบ side-by-side กับ Word แยก, รวมทั้งตัวอย่าง 1 รายการและหลายหน้า, ภาษาไทย, Thai digits, ราคา/ข้อความ, table 0, garuda, headers, signature. Export PDF ด้วย browser ตรวจ print preview และ scale 100% ตามรูปแบบจริง. อย่าอ้าง PASS visual ถ้าตรวจเฉพาะ XML หรือ HTML. หากต้องแก้ Native DOCX ของ 3/5/6 ในอนาคต ต้องทำทีละหัวข้อและให้ผู้ใช้อนุมัติ ไม่ใช่งานที่จำเป็นตอนนี้.
+
+## v1.3.0 candidate — hydrate TOR จาก archive
+แก้เฉพาะ contract data adapter ใน `assets/history-bundle.js` และ cache version ใน `document_history.php`: ใช้ savedTorHistoryIds/historySnapshotKeys/snapshotMedicines ของหน้า TOR, ส่ง key ที่ตรวจ scope/fingerprint; ไม่ remap medicine_id หรือชื่อจาก live list. `assets/history-docx-merge.js` และ `core/word_export_lib.php` ไม่แก้; V4 formatting และ section/table settings คงเดิม. Offline HTML 34 comparisons ผ่านจาก dump เดิม แต่ต้องตรวจ Word/PDF/Merge Desktop ก่อน release. อ่าน [DOCUMENT_SNAPSHOT.md](DOCUMENT_SNAPSHOT.md).
+
+- ตรวจ Chromium แบบ DOM fixture ด้วย `hydrateTor` ตัวจริง: 17 histories / 59 rows, history ID/row token/name/reference price ตรง archive; stale/missing snapshot ถูกปฏิเสธ. ไม่ได้รันการประกอบไฟล์ Word จริง.

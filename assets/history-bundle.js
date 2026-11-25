@@ -93,10 +93,13 @@
 
   function hydrateTor(form, html, caseId) {
     const histories = readPageJson(html,'histories');
-    const meds = readPageJson(html,'medicines');
+    const keys = readPageJson(html,'historySnapshotKeys');
+    const meds = readPageJson(html,'snapshotMedicines');
+    const saved = readPageJson(html,'savedTorHistoryIds');
     const matches = Object.values(histories || {}).filter(row => String(row.case_id || '') === String(caseId));
     matches.sort((a,b) => Number(b.id || 0) - Number(a.id || 0));
-    const history = matches[0];
+    const wanted = saved[String(caseId)];
+    const history = wanted ? matches.find(h => String(h.id) === String(wanted)) : matches[0];
     if (!history) throw new Error('ไม่พบ TOR ที่บันทึกไว้ในชุดเอกสารนี้');
     let items, committee;
     try {
@@ -113,17 +116,14 @@
     if (!template) throw new Error('ไม่พบช่องกรอกรายการยาในหน้า TOR');
     const rows = document.createDocumentFragment();
     let usesPackage = false;
-    items.forEach(item => {
+    items.forEach((item,index) => {
       const row = template.cloneNode(true);
-      let medId = String(item.medicine_id || '');
-      if (!medId || !meds[medId]) {
-        const matching = Object.entries(meds || {}).find(([,med]) => String(med.name||'').trim().toLowerCase() === String(item.name||'').trim().toLowerCase());
-        medId = matching ? String(matching[0]) : '';
-      }
-      if (!medId) throw new Error('หาเลขอ้างอิงยาของรายการ “' + String(item.name||'') + '” ไม่พบ กรุณาเปิดหน้า TOR ตรวจสอบข้อมูลก่อน');
+      const medId = keys[history.id]?.[index];
+      if (!medId || !meds[medId] || meds[medId].error) throw new Error('Snapshot TOR แถว ' + (index+1) + ' ไม่สมบูรณ์ กรุณาตรวจข้อมูลประวัติก่อนรวม Word');
       inputValue(row, '[name="medicine_id[]"]', medId);
+      inputValue(row, '[name="medicine_label[]"]', item.name);
       inputValue(row, '[name="quantity[]"]', item.quantity);
-      inputValue(row, '[name="requested_quantity[]"]', item.requested_quantity ?? item.quantity);
+      inputValue(row, '[name="requested_quantity[]"]', item.requested_quantity ?? (Number(item.package_size || 0)>0 ? Number(item.quantity)*Number(item.package_size) : item.quantity));
       inputValue(row, '[name="package_size[]"]', item.package_size ?? '');
       inputValue(row, '[name="reference_price[]"]', item.reference_price ?? '');
       inputValue(row, '[name="offer_price[]"]', item.offer_price ?? '');

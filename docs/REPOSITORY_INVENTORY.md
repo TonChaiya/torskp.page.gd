@@ -89,3 +89,6 @@ git log --oneline --all
 ```
 
 เปรียบเทียบ path และ hash กับ baseline เฉพาะส่วนที่ได้รับผลกระทบ; หลัง docs commit จำนวนไฟล์จะเพิ่มขึ้นตามปกติ. อย่าอัปเดต baseline โดยไม่ได้ตรวจโค้ดจริง.
+
+## หมายเหตุ baseline รุ่นถัดมา
+บัญชี SHA ด้านบนเป็น inventory ในอดีตตามวันที่หัวเอกสาร ไม่ใช่รายการปัจจุบันทั้งหมด. v1.2.0 HEAD `fced437f022f07924ca163141b02a14c4f176b5c`; v1.3.0 candidate เพิ่ม `core/document_snapshot.php`, `catalog_snapshot_review.php`, `tests/document_snapshot_test.php`, `docs/DOCUMENT_SNAPSHOT.md`, แก้จุดเชื่อมต่อที่ระบุในเอกสารนี้. ตรวจ tree/HEAD ใหม่เมื่อ Push; ห้ามแก้ hash ในประวัติเพื่อแสร้งว่าตรงกับรุ่นใหม่.

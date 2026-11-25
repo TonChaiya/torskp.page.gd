@@ -237,7 +237,7 @@ $initialVisibleCount = $initialNeedle === '' ? $totalCases : count(array_filter(
     </form>
 </dialog>
 <script src="assets/history-docx-merge.js?v=20261124-bundle4" defer></script>
-<script src="assets/history-bundle.js?v=20261124-bundle2" defer></script>
+<script src="assets/history-bundle.js?v=20261125-snapshot1" defer></script>
 <script>
 (() => {
     'use strict';
