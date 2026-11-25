@@ -1,3 +1,16 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### UI ที่ต้องรักษาในรุ่นปัจจุบัน
+Admin มี toolbar กระชับเหนือรายการ, Popup แยก add/edit/import และ safe clear ของแต่ละคลัง, Excel export รายการยา, ปุ่มตรวจ Snapshot และรายละเอียด recoverable/issues/deferred. รักษา live search ไม่ reload, scroll ภายใน Popup, busy/confirmation/error states, action attribute fix ไม่ใช้ `form.action` เมื่อมี named input `action`. ไม่เพิ่มการ์ดซ้อน/ปุ่มยืดหรือย้ายฟอร์มลงท้ายรายการ. ไม่ปรับหน้าจอที่ผู้ใช้ใช้งานได้แล้วโดยไม่มี scope; ดู [IMPORT_SYSTEM](IMPORT_SYSTEM.md) และ [DOCUMENT_SNAPSHOT](DOCUMENT_SNAPSHOT.md) ก่อนแก้.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # UI/UX guidelines
 
 ## เป้าหมาย

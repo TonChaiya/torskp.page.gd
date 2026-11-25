@@ -1,3 +1,20 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](docs/PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### คำสั่งสำหรับ AI/ผู้พัฒนาที่มีผลปัจจุบัน
+- เริ่มที่ [PROJECT_STATUS](docs/PROJECT_STATUS.md) และตรวจ HEAD/working tree จริงก่อนแก้. Source baseline ที่ตรวจ `f30c93cfa6be5030aa68ea76c26d941b07dfb52e`; commit ฟีเจอร์ v1.3.0 `cb7183f4dfe08a0ff93f909ad017a7eee2c0f0bf`. รุ่นนี้ขึ้น Production ตามผู้ใช้แล้ว; ไม่ต้องนำงาน v1.1–v1.3 กลับมาทำใหม่โดยไม่มีปัญหาหรือคำสั่งใหม่.
+- อ่าน [DOCUMENT_SNAPSHOT](docs/DOCUMENT_SNAPSHOT.md) และ [IMPORT_SYSTEM](docs/IMPORT_SYSTEM.md) เพิ่มเมื่อแก้ catalog/document. กฎ v1.3.0 ใช้เหนือ blanket guard v1.2.0: ล้าง medicines ได้เมื่อ audit ไม่มี issues/recoverable และผ่าน count/hash, backup ack, Admin+CSRF, transaction; deferred เป็นหมายเหตุที่ต้องรักษาตาม contract. ห้ามปลด guard หรือเดาข้อมูลย้อนหลัง. ไม่ใช่ immutable revision archive.
+- Git ปัจจุบันไม่มี dump จริงและ staging ที่เคยติด HEAD; `.gitignore` ป้องกัน `storage/tmp/*` ยกเว้น `.gitkeep`/`.htaccess`. ประวัติ Git เก่ายังเสี่ยง; ห้าม rewrite/force push เอง. ห้ามนำ config จริง, vendor, backup, fixture จริงขึ้น Git.
+- งานปัจจุบันเป็น maintenance: ขออนุมัติขอบเขตงานใหม่ก่อนแก้, ใช้ diff เฉพาะจุด, ทดสอบตามผลกระทบจริง, ห้ามลด auth/CSRF/validation เพื่อให้ผ่าน. Bugfix พิจารณา v1.3.1; feature ใหม่พิจารณา v1.4.0 เมื่อผู้ใช้กำหนด. ไม่สร้าง tag หรือ release เอง.
+- เอกสารชุดนี้เก็บข้อความต้นฉบับทุกไบต์ไว้ใต้ส่วนประวัติ; อ่านหมายเหตุล่าสุดก่อนตีความสถานะเก่า. เพิ่ม/แก้สถานะพร้อมหลักฐานและวันที่ ไม่ลบประวัติ/ข้อกำหนดโดยพลการ. ห้ามอ้างผลทดสอบ DB/Word/Hosting ที่ไม่ได้รันจริง.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # AGENTS.md — TOR SKP
 
 คู่มือสำหรับ AI และผู้พัฒนาทุกเจ้า | baseline: v1.1.0, `986c48cdcfe76116742a3a8cccffac2c0e75eef6` (24 พฤศจิกายน 2569)

@@ -1,3 +1,16 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### โครงสร้างที่ใช้งานอยู่ v1.3.0
+Source baseline `f30c93cf`. โครงสร้าง PHP หน้าเดิม + PDO + JS/CSS + PHPWord/mPDF ไม่เปลี่ยน framework. Import runtime ใน `core/catalog_import.php`, `core/spreadsheet_import.php`, `core/medicine_import.php`, `core/price_reference_import.php`; export/clear `core/medicine_catalog_tools.php`. Snapshot audit/resolution/backfill `core/document_snapshot.php` + `catalog_snapshot_review.php`; principle/TOR/history bundle ใช้ archive keys และ case/history ownership. `assets/history-docx-merge.js` กับ `core/word_export_lib.php` คง engine เดิม. ข้อความ architecture v1.1 และ candidate ด้านล่างอธิบายวิวัฒนาการ; ดู [DOCUMENT_SNAPSHOT](DOCUMENT_SNAPSHOT.md) และ [IMPORT_SYSTEM](IMPORT_SYSTEM.md) เป็น contract ล่าสุด. ไม่เพิ่ม services หรือ DB tables.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Architecture — v1.1.0
 
 ## รูปแบบระบบ

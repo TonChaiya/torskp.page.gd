@@ -1,3 +1,20 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](docs/PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### v1.3.0 — ปิดเวอร์ชัน / Production (25 พ.ย. 2569)
+- v1.2.0 commit `fced437f022f07924ca163141b02a14c4f176b5c` รวม Import/preview/Popup/Excel hotfix/export/safe clear.
+- v1.3.0 commit `cb7183f4dfe08a0ff93f909ad017a7eee2c0f0bf` รวม Document Snapshot, audit/backfill และ clear gate ใหม่; ผู้ใช้แจ้ง Dev ใช้งานได้เวลา 12:05 ICT.
+- `.gitignore` commit `a892806e68e2e0aca2eb26fb2f25bac631e081f5`; ลบ staging 3 ไฟล์จาก HEAD ผ่านเว็บใน commit `f30c93cfa6be5030aa68ea76c26d941b07dfb52e`; เก็บไฟล์ป้องกัน storage ไว้. ไม่ล้างประวัติ Git.
+- เวลา 12:56 ICT ผู้ใช้ยืนยันอัปโหลด InfinityFree และใช้งานจริงได้หมดแล้ว. ปิด implementation ตามรายงานผู้ใช้เป็น stable maintenance baseline; ไม่มีผลทดสอบ production รายกรณีหรือ independent certification เพิ่ม. ผลทดสอบเดิม 39 Snapshot / 117 Import assertions และ offline comparison คงตามข้อจำกัดเดิม.
+- รอบนี้ documentation-only: ไม่มี PHP/JS/CSS/SQL/template binary change, ไม่มี migration, ไม่มี deploy/DB action/commit/tag โดยผู้ช่วย. งานดูแลคงเหลือดู [PROJECT_STATUS](docs/PROJECT_STATUS.md).
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Changelog — TOR SKP
 
 หมายเลขรุ่นยึดจาก Git commit messages ณ 24 พ.ย. 2569; รุ่นย่อย Word Merge แยกจาก version เว็บไซต์. ประวัติ commit ก่อน v1.1.0 บางรายการมีเพียงเลขรุ่น จึงไม่สมมติรายละเอียดเพิ่ม

@@ -1,3 +1,18 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### Maintenance gate หลัง v1.3.0
+การพัฒนาหลักปิดตามผลผู้ใช้แล้ว; ไม่ rerun ทุก phase หรือ deploy ซ้ำเพียงเพราะข้อความ Candidate ด้านล่าง. เมื่อมีงานใหม่ ตรวจ HEAD/dirty tree และ source เฉพาะที่เกี่ยวข้อง, วางแผนก่อนแก้, ทดสอบ regression ตาม scope บน Dev/clone, สำรองก่อน deploy, อัปโหลดเฉพาะ runtime ที่เปลี่ยนและคง production config/vendor ที่ตรง lock. ไม่ทดสอบ delete/clear บนฐานจริง. เอกสาร-only รอบนี้ไม่ต้อง lint PHP หรือรัน MySQL/Word ซ้ำ; ตรวจ SHA/เนื้อหา MD และ staged files เท่านั้น.
+
+สำหรับ Windows ที่ `composer` ไม่อยู่ PATH ให้ตรวจ Laragon Terminal หรือใช้ vendor ที่ตรง `composer.lock` และ PHP/extensions ของ Hosting; ไม่สั่ง composer update เพื่อแก้ปัญหา PATH. ใช้ `git pull --ff-only` เมื่อมี web commit และ working tree ปลอดภัย; ห้าม force/reset/clean. ก่อน Push ให้ตรวจ `git diff --check`, `git diff --cached --stat`, `git ls-files -- storage/tmp/` และ `git ls-files -- '*.sql'`. หลัง Push ตรวจ remote SHA จริง. การอัปเดต docs ไม่ต้องอัปโหลดไป Hosting.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Development / testing / release
 
 ## สภาพแวดล้อม

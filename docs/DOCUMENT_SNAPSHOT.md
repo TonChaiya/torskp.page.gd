@@ -1,3 +1,18 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### สถานะ Phase 1–5 หลังผู้ใช้ทดสอบ
+Implementation Phase 1–4 ส่งมอบและ Push แล้วใน `cb7183f4`; Phase 5 ปิดงานระดับการใช้งานตามผู้ใช้ที่แจ้ง Dev ใช้ได้และ Production ใช้งานจริงได้หมดแล้ว. ไม่มี log แยกราย test case ของ MySQL/Word/concurrency ที่ผู้ช่วยตรวจได้; ผล 39/117 และ offline 17/59/34 ด้านล่างเป็นหลักฐานเดิมเท่านั้น. ห้ามแปลงเป็น PASS ของทุก scenario หรือสมมติว่าจำนวน recoverable 58/deferred 1 คือฐานปัจจุบัน.
+
+กฎปัจจุบัน: เปิด archive ตาม case/history row key, ไม่ remap live ID/name; audit read-only ก่อน explicit backfill, ห้ามเดาจากคลังปัจจุบัน. `recoverable` หรือ `issues` ต้องเป็นศูนย์ก่อน clear, deferred ตามเงื่อนไขเดิมแสดงหมายเหตุและไม่เติม spec ที่ไม่ตรง. ใช้ backup ack, hash recheck, transaction; ห้ามลบเอกสารเพื่อผ่าน guard. หากต้องแก้ TOR โดยเจตนายังอาจกระทบเอกสารที่อ้าง history เดียวกัน; immutable revision archive ไม่อยู่ใน scope รุ่นนี้. ไม่มี migration. Checklist Phase 5 เดิมใช้เป็น regression สำหรับงานใหม่บนฐาน clone ไม่ใช่คำสั่งให้ล้าง Production.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Document Snapshot — v1.3.0 candidate (25 พ.ย. 2569)
 
 ## สถานะ / baseline

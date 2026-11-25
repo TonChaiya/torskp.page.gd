@@ -1,3 +1,20 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### Inventory ปัจจุบัน (ตรวจ GitHub ก่อน docs closure)
+- Source HEAD `f30c93cfa6be5030aa68ea76c26d941b07dfb52e`: 101 tracked blobs, 19 MD. Recursive tree ไม่ truncated. [ดู tree](https://github.com/TonChaiya/torskp.page.gd/tree/f30c93cfa6be5030aa68ea76c26d941b07dfb52e).
+- v1.3.0 feature commit `cb7183f4dfe08a0ff93f909ad017a7eee2c0f0bf`; เทียบจาก v1.2.0: เพิ่ม `catalog_snapshot_review.php`, `core/document_snapshot.php`, `tests/document_snapshot_test.php`, `docs/DOCUMENT_SNAPSHOT.md`; แก้ `admin.php`, `assets/admin-modal.js`, `assets/history-bundle.js`, `core/medicine_catalog_tools.php`, `document_history.php`, `principle_approval_memo.php`, `tor_company_purchase.php`, `tests/catalog_import_test.php` และ MD ที่เกี่ยวข้อง.
+- `.gitignore` อัปเดตและ staging 3 ไฟล์ถูกลบจาก HEAD; storage เหลือ `storage/.htaccess`, `storage/tmp/.gitkeep`, `storage/tmp/.htaccess`. SQL ที่ track มี 8 ไฟล์ (schema 1, migration 5, checks 2); ไม่มี dump จริงใน tree. ยังมีความเสี่ยงใน Git history.
+- DOCX templates ที่ track: `committee_scope_invitation.docx`, `principle_approval_memo.docx`, `scope_price_approval_memo.docx`; Excel templates 2 ไฟล์ใน `templates/import/`. `vendor/` ไม่ track. ไม่ส่ง binary/font/SQL ใน ZIP docs closure.
+- รอบนี้ตรวจ MD 19/19 ตรง Git blob SHA (จาก ZIP ต้นฉบับตาม path และ normalize CRLF เป็น LF); ไม่ได้ audit โค้ดทุกบรรทัดหรือ binary/Hosting ใหม่. Inventory hash ด้านล่างเป็นประวัติ v1.1.0 ห้ามใช้เป็น SHA ปัจจุบัน. Docs-only commit ถัดไปจะเปลี่ยน hash เอกสารโดยไม่เปลี่ยน runtime.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 > บัญชีไฟล์นี้เป็น snapshot ประวัติ ณ HEAD 986c48cd ก่อน docs และ DB baseline ไม่ใช่รายการไฟล์ปัจจุบัน; schema/ignore/docs เปลี่ยนหลังจากนั้นตาม CHANGELOG. รายการ dump ที่เคย track ใช้เพื่อระบุไฟล์ที่จะ untrack ไม่ใช่คำสั่งให้เก็บหรือเผยแพร่ข้อมูล.
 
 # Repository inventory — audited baseline

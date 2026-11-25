@@ -1,3 +1,16 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### Word/PDF ใน stable maintenance baseline
+v1.3.0 ปรับ hydration ของ TOR ใน Word รวมให้ส่ง archive row key ที่ server ตรวจ case/history ownership แทน live catalog ID. ไม่แก้ merge engine V4, font/template, Thai Distribute หรือ table spacing. ผู้ใช้เคยยืนยัน V4 ผ่านและปัจจุบันรายงานว่าเว็บใช้งานจริงได้หมด; ผู้ช่วยไม่ได้ทดสอบ Microsoft Word/Production จริงเพิ่มเติม. คงข้อจำกัด altChunk/Word Online/LibreOffice ตามประวัติ. เมื่อมีงาน export ใหม่ ให้ตรวจรายหัวข้อและรวมใน MS Word Desktop พร้อมค่า TOR สองโหมด/ขนาดบรรจุ/ชื่อไฟล์และ snapshot; อย่าอ้างว่า DOM fixture คือ DOCX rendering จริง. ดู [DOCUMENT_SNAPSHOT](DOCUMENT_SNAPSHOT.md).
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Word / PDF — สัญญาการจัดรูปแบบที่ต้องรักษา
 
 ## ตัวสร้างรายหัวข้อ

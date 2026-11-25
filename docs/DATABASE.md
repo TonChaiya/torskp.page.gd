@@ -1,3 +1,16 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### DB contract ปัจจุบัน
+Git HEAD มี `database/schema.sql`, migration เดิม 5 ไฟล์ และ read-only checks 2 ไฟล์; supplier migration ไม่ใช่งานรอ Push แล้ว. ไม่พบ full dump ใน HEAD. v1.2/v1.3 ไม่เพิ่ม table/column/migration; Snapshot ใช้ JSON เดิมและ provenance, ไม่เปลี่ยนประวัติ TOR แบบอัตโนมัติ. คง 12 ตารางตาม baseline schema; ยังไม่ได้ตรวจ schema/จำนวนแถวบน Hosting จริงโดยผู้ช่วย. ห้ามนำ schema หรือ migration เก่ามา import ทับ Production ที่ใช้งานได้แล้ว. กฎล้างยา v1.3.0 ใช้ snapshot readiness แทน blanket block v1.2.0; ล้างราคากลางแยกจากยา. ดู [DOCUMENT_SNAPSHOT](DOCUMENT_SNAPSHOT.md), [IMPORT_SYSTEM](IMPORT_SYSTEM.md). สำรองหลัง release และ restore test บนฐานแยกตาม [DATABASE_BACKUP](DATABASE_BACKUP.md).
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # ฐานข้อมูล TOR SKP v1.1.0 — canonical baseline
 
 ## สถานะอ้างอิง 24 พฤศจิกายน 2569

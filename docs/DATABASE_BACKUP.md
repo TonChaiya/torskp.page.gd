@@ -1,3 +1,18 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### สถานะ cleanup และ backup ปัจจุบัน
+ตรวจ tree ของ `f30c93cf`: ไม่พบ dump สองไฟล์เดิมใน HEAD และไม่พบ import staging; `.gitignore` มี SQL deny-by-default และ runtime tmp exclusions. คำสั่ง untrack ในประวัติด้านล่างไม่ใช่งานที่ต้องรันซ้ำ. การลบจาก HEAD ไม่ได้ลบประวัติ/clone/fork/cache; repo ยัง Public ณ วันที่ตรวจ. จำกัดสิทธิ์, ตรวจผลกระทบ, rotate secrets/บัญชีที่เสี่ยงตามผู้รับผิดชอบ; ห้าม rewrite history เอง.
+
+หลังขึ้น Production ให้ Export structure+data ผ่าน phpMyAdmin และสำรองไฟล์เว็บ/config/vendor ที่ใช้งานได้พร้อม SHA รุ่นและวันเวลา เก็บแบบ private นอก web root/Git. ตรวจไฟล์ backup และทดสอบ restore ไปฐานแยก; อย่าใช้ระบบ Production เป็นที่ทดสอบ. ยังไม่มีการยืนยันว่า backup หลัง release/restore drill เสร็จแล้ว.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Backup, restore และนำ SQL dump ออกจาก Git
 
 ## สิ่งที่พบ

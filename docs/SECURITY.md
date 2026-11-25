@@ -1,3 +1,18 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### ความเสี่ยงที่ยังเปิดหลัง Production
+ตรวจ GitHub `f30c93cf`: repo ยัง Public, dump จริงเดิมและ staging ไม่อยู่ใน HEAD แล้ว, `.gitignore` มี runtime rules, `storage/.htaccess`, `storage/tmp/.htaccess`, `.gitkeep` ยังอยู่. การลบไม่ได้ล้าง history; ประเมินข้อมูลที่อาจเผยแพร่และจำกัด access/rotate credentials ที่กระทบตามผู้รับผิดชอบโดยเร็ว. ไม่ทำ history rewrite หรือ force push โดยไม่มีอนุมัติ. ไม่คัดลอกข้อมูลจริงลง docs/issue/chat.
+
+ผู้ใช้ยืนยันเว็บใช้งานได้ ไม่ใช่หลักฐานว่า HTTPS, HTTP deny, sessions, role/CSRF, hosting config, backup/restore ผ่าน audit. ตรวจแบบไม่แตะข้อมูลจริง; เก็บ credentials นอก Git, ไม่เปิด debug หรือ upload SQL/tests/docs ลง web root. ไม่เปลี่ยน auth policy หรืออ้าง tenant isolation โดยไม่ตรวจ. ดู [DATABASE_BACKUP](DATABASE_BACKUP.md).
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Security และการดูแลข้อมูล
 
 ## Authentication/authorization

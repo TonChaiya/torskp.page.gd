@@ -1,3 +1,19 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](docs/PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### รุ่นใช้งานจริงและคู่มือปัจจุบัน
+- รุ่น v1.3.0 — Document Snapshot & Catalog Independence; feature commit [`cb7183f4`](https://github.com/TonChaiya/torskp.page.gd/commit/cb7183f4dfe08a0ff93f909ad017a7eee2c0f0bf); source baseline [`f30c93cf`](https://github.com/TonChaiya/torskp.page.gd/commit/f30c93cfa6be5030aa68ea76c26d941b07dfb52e). ไม่ใช่ Git tag ที่สร้างในรอบนี้.
+- Production: InfinityFree ตามผู้ใช้; ใช้งานระบบหลักได้แล้ว. ไม่ต้องติดตั้งใหม่หรือรัน migration เพื่อปิดเอกสาร. ใช้ schema v1.1.0 (12 ตาราง) ต่อไป; `schema.sql` สำหรับฐานใหม่ว่างเท่านั้น.
+- อ่าน [สถานะล่าสุด](docs/PROJECT_STATUS.md), [AGENTS](AGENTS.md), [Import](docs/IMPORT_SYSTEM.md), [Snapshot](docs/DOCUMENT_SNAPSHOT.md), [Backup](docs/DATABASE_BACKUP.md), [Security](docs/SECURITY.md) ก่อนงาน maintenance. Word Merge V4 คงเดิม; snapshot ไม่ใช่ immutable versioning.
+- Deploy ครั้งต่อไป: สำรองไฟล์+DB ก่อน; ใช้ Git SHA ที่ตรวจแล้ว, vendor จาก Composer lock ที่ตรงกับ PHP/extensions ของ Hosting, รักษา config ฐานจริงแยกจาก Git; อัปโหลดไฟล์ runtime ที่เปลี่ยนเท่านั้น, ไม่อัปโหลด docs/tests/tools/SQL/dump. ทดสอบ smoke ตาม scope หลังอัปโหลด. ห้ามสั่งลบปลายทางอัตโนมัติ.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # TOR SKP — ระบบจัดทำเอกสารจัดซื้อยา
 
 ระบบ PHP/MySQL สำหรับชุดเอกสารจัดซื้อเวชภัณฑ์ยา ภาษาไทย รองรับฟอร์มราชการ การจัดเก็บข้อมูลตามชุดจัดซื้อ การพิมพ์ PDF และดาวน์โหลด Word แยกรายหัวข้อหรือรวมทั้งชุด

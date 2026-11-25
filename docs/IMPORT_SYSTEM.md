@@ -1,3 +1,20 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### สถานะ Import ที่ใช้งานจริงใน v1.3.0
+v1.2.0 source/hotfix ทั้งหมดอยู่ Git และสืบทอดใน v1.3.0. ผู้ใช้ยืนยันระบบจริงใช้งานได้; ไม่มีรายงานทดสอบแยกราย XLSX/CSV/engine จาก Hosting ที่ผู้ช่วยตรวจได้. ไม่เปิดงานเดิมซ้ำเพียงเพราะหัวข้อ Candidate. ผลทดสอบล่าสุดก่อนปิดรุ่น: Import 117 assertions ด้วย fake PDO (native XLSX skipped); ตัวเลข 52/65/84/88/116 ในประวัติเป็นผลของคนละรอบ ไม่รวมกัน.
+
+- แยกคลังยา (3 คอลัมน์, spec multiline) และราคากลาง (4 คอลัมน์, decimal 4 ตำแหน่งพร้อม warning) เสมอ; first worksheet Import, strict header, read-only preview, blocking error/duplicate/conflict, explicit confirmation และ rollback.
+- Export Excel รายการยาทั้งหมดไม่ใช่ full DB backup; clear ราคากลางแยกจาก clear ยา. โหมด replace มีเฉพาะราคากลาง; clear medicines ใช้ snapshot readiness v1.3.0 แทน blanket guard เดิม (ดู [DOCUMENT_SNAPSHOT](DOCUMENT_SNAPSHOT.md)). ไม่ bypass guard หรือ reset ID.
+- Hotfix POST 404 และ XMLReader อยู่ใน source ปัจจุบัน; ห้ามนำโค้ดเก่ามาทับ. Runtime staging ออกจาก HEAD แล้ว; ignore `/storage/tmp/*` พร้อม exceptions `.gitkeep` และ `.htaccess`. ตรวจ writable/deny HTTP และ hosting limits ก่อน Import ชุดใหญ่; ไม่รับรอง stress limit เป็น throughput จริง. ทดสอบ import/clear บน clone เมื่อต้องแก้ระบบ.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Import System — TOR SKP v1.2.0 candidate
 
 วันที่ 25 พฤศจิกายน 2569 | Baseline `c923372cf8b10eab12be5152b3d7446036ae807e`. ใช้ PHP 8.1+, PDO MySQL, schema v1.1.0; ไม่มี migration หรือ dependency ใหม่. ไม่ใช่ release Production ที่ผ่าน UAT แล้ว.

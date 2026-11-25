@@ -1,3 +1,38 @@
+# บันทึกสถานะปัจจุบัน — v1.3.0
+
+**สถานะล่าสุด 25 พฤศจิกายน 2569 (ปิดงาน v1.3.0):** ผู้ใช้ยืนยันว่า Dev ใช้งานได้ และอัปโหลดขึ้น InfinityFree ใช้งานจริงได้หมดแล้ว (12:56 น. ICT). กำหนด v1.3.0 เป็น stable maintenance baseline ตามการยืนยันของผู้ใช้; ไม่ใช่ผลรับรอง independent UAT หรือ security audit. ข้อความ Candidate/รอ Push/รอ Production ในเนื้อหาเดิมด้านล่างเป็นบันทึกตามเวลาที่เขียน ไม่ใช่งานค้างปัจจุบัน. ข้อกำหนดทางเทคนิคและข้อจำกัดการทดสอบเดิมยังคงมีผล.
+
+อ่าน [สถานะ canonical](PROJECT_STATUS.md) สำหรับงานคงเหลือและขอบเขตหลักฐาน.
+
+### สถานะ canonical — รุ่นปัจจุบัน
+| รายการ | สถานะ / หลักฐาน |
+|---|---|
+| v1.1.0 Workflow, Word/PDF, Word Merge V4, auth | implementation เดิมคงอยู่; ผู้ใช้เคยยืนยัน V4 ผ่าน |
+| v1.2.0 Import & Catalog Management | อยู่ใน Git `fced437f022f07924ca163141b02a14c4f176b5c`; รวม hotfix และ export/clear |
+| v1.3.0 Document Snapshot | อยู่ใน Git `cb7183f4dfe08a0ff93f909ad017a7eee2c0f0bf`; ผู้ใช้แจ้ง Dev ใช้ได้ 12:05 ICT |
+| Git cleanup | `a892806e` เพิ่ม ignore; `f30c93cf` ลบ staging จาก HEAD; ตรวจ tree ล่าสุดมี storage protection ครบ |
+| Production InfinityFree | ผู้ใช้ยืนยันอัปโหลดและใช้งานจริงได้หมดแล้ว 12:56 ICT; ปิดงานพัฒนาหลักตามการยืนยันของผู้ใช้ |
+| DB schema / Word Merge | schema 12 ตารางเดิม; ไม่มี migration v1.2/v1.3; V4 merge engine ไม่เปลี่ยน |
+| QA evidence | 39 Snapshot / 117 Import assertions, offline 17 histories / 59 rows, HTML 34 comparisons, Chromium DOM fixture ตามเอกสารเดิม; ไม่ใช่ผล MySQL/Word จริงจากผู้ช่วย |
+| Docs closure | จัดชุด MD ฉบับปิดงานจาก HEAD `f30c93cfa6be5030aa68ea76c26d941b07dfb52e`; รอผู้ใช้นำไปวางทับและ Push |
+
+ไม่มีหลักฐานรายกรณีจาก Production (PHP/MySQL versions, actual schema, restore drill, performance limits, security/HTTP protection, Word comparison) หรือ deployment manifest ที่ผู้ช่วยตรวจได้โดยตรง. ไม่สรุปว่าทุก edge case ผ่าน, ไม่บังคับเปิดงานที่ผู้ใช้ปิดแล้ว. Baseline นี้เป็นจุดอ้างอิง source ไม่ใช่การยืนยัน checksum ไฟล์บน Hosting. ข้อมูลสถิติ Dev dump เดิมเป็นประวัติ ไม่ใช่จำนวนแถวบน Production ปัจจุบัน.
+
+### งานคงเหลือหลัง release (ไม่ใช่ implementation ค้าง)
+| ลำดับ | งาน | สถานะ |
+|---|---|---|
+| P1 | สำรองไฟล์เว็บและ SQL Production หลังติดตั้ง; เก็บ private และทดลอง restore ลงฐานแยก | ยังไม่มีการยืนยัน |
+| P1 | ประเมินความเสี่ยง SQL dump/Import staging ในประวัติ Git, จำกัด visibility/access, rotate credentials ที่กระทบ | repo ยัง Public ณ การตรวจ; ไม่ได้ดำเนินการ |
+| P1 | ตรวจ HTTPS, deny access core/storage, permissions และ approval ตามสิทธิ์ | ยังไม่ได้ตรวจโดยผู้ช่วย |
+| P2 | ปิดเอกสาร MD และ Push เฉพาะ docs | ชุดเอกสารพร้อมส่ง; ยังไม่ Push |
+| P3 | Tailwind CDN, performance, backup cadence | optional; ไม่อนุมัติเป็น feature ใหม่ |
+
+เมื่อมี bug ให้ตรวจ baseline และแก้เฉพาะจุด (พิจารณา v1.3.1); feature ใหม่แยกแผน (พิจารณา v1.4.0). ไม่เริ่ม refactor, schema migration หรือ immutable revision archive โดยพลการ. ใช้ [DEVELOPMENT](DEVELOPMENT.md) สำหรับ regression เมื่อมีงานใหม่. ไม่ล้างข้อมูลจริงเพื่อทดสอบ.
+
+---
+
+> **เอกสารต้นฉบับ / ประวัติการพัฒนา:** เนื้อหาต่อจากนี้เก็บครบตาม Git baseline; กฎปัจจุบันด้านบนใช้เฉพาะเมื่อแก้สถานะหรือชี้แจงความขัดแย้ง ไม่ยกเลิกข้อกำหนดทางเทคนิคเดิม.
+
 # Project status — snapshot 24 พ.ย. 2569
 
 ## ยืนยันจาก GitHub
