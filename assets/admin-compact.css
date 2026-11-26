@@ -80,3 +80,47 @@
 .admin-backoffice .compact-table-viewport { width:100%!important; max-width:100%!important; min-width:0!important; }
 .admin-backoffice .compact-table-viewport td:last-child a,.admin-backoffice .compact-table-viewport td:last-child form { display:inline-block!important; vertical-align:middle; }
 .admin-backoffice .compact-table-viewport td:last-child button { border:0!important; box-shadow:none!important; background:none!important; padding:0 2px!important; line-height:1.4; }
+
+/* 20261126c — use the final workspace geometry at FIRST PAINT.
+ * This stylesheet is linked in admin.php's head; do not wait for admin-modal.js
+ * or the dynamically loaded admin-workspace.css to constrain the header.
+ * Keep the same geometry even in the accessible legacy fallback.
+ */
+.admin-backoffice .compact-admin-main {
+    width:min(calc(100% - 36px),1160px)!important;
+    max-width:1160px!important;
+    margin-inline:auto!important;
+    padding:16px 0 36px!important;
+}
+@media(max-width:640px){
+    .admin-backoffice .compact-admin-main{width:calc(100% - 20px)!important}
+}
+
+/* Hold the legacy content out of sight and out of the page's vertical flow.
+ * No change to actual form nodes, their fields, or handlers. Match the final
+ * navigation strip while pending, so the header and account link do not jump.
+ * No-script users see the original forms immediately; blocked/failed scripts
+ * retain the existing explicit fallback and the 8-second CSS safety release.
+ */
+@media (scripting: enabled) {
+    .admin-backoffice .compact-admin-main:not(.tor-workspace-ready):not(.tor-workspace-fallback) .compact-section-nav {
+        position:static;display:flex!important;align-items:center;justify-content:space-between;
+        background:transparent;box-shadow:none;padding:3px 0!important;gap:8px;
+        white-space:normal;overflow:visible;
+    }
+    .admin-backoffice .compact-admin-main:not(.tor-workspace-ready):not(.tor-workspace-fallback) .compact-section-nav::before {
+        content:'เลือกหมวดที่ต้องการจัดการ';font-size:13px;font-weight:700;color:#45637c;
+        animation:tor-admin-pending-label-release 0s 8s forwards!important;
+    }
+    .admin-backoffice .compact-admin-main:not(.tor-workspace-ready):not(.tor-workspace-fallback) .compact-section-nav a[href^="#"] {
+        position:absolute;visibility:hidden;pointer-events:none;
+        animation:tor-admin-legacy-link-release 0s 8s forwards!important;
+    }
+    .admin-backoffice .compact-admin-main:not(.tor-workspace-ready):not(.tor-workspace-fallback)>div.grid {
+        max-height:0;overflow:hidden;visibility:hidden;pointer-events:none;
+        animation:tor-admin-legacy-grid-release 0s 8s forwards!important;
+    }
+    @keyframes tor-admin-pending-label-release {to{content:none;}}
+    @keyframes tor-admin-legacy-link-release {to{position:static;visibility:visible;pointer-events:auto;}}
+    @keyframes tor-admin-legacy-grid-release {to{max-height:none;overflow:visible;visibility:visible;pointer-events:auto;}}
+}

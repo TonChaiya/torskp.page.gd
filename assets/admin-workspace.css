@@ -1,0 +1,124 @@
+/* TOR SKP — compact admin category workspace. Only activated after original DOM is verified. */
+.admin-backoffice .compact-admin-main.tor-workspace-ready{width:min(calc(100% - 36px),1160px)!important;max-width:1160px!important;margin-inline:auto!important;padding:16px 0 36px!important}
+.admin-backoffice .tor-workspace-ready .compact-section-nav{position:static;display:flex!important;align-items:center;justify-content:space-between;background:transparent;box-shadow:none;padding:3px 0!important;gap:8px}
+.admin-backoffice .tor-workspace-ready .compact-section-nav [hidden],.admin-backoffice .tor-workspace-dialog [hidden]{display:none!important}
+.admin-backoffice .tor-workspace-nav-label{font-size:13px;font-weight:700;color:#45637c}
+.admin-backoffice .tor-workspace-menu{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;min-width:0}
+.admin-backoffice .tor-workspace-group{background:#fff;border:1px solid #dce7f0;border-radius:12px;min-width:0;overflow:hidden}
+.admin-backoffice .tor-workspace-group-title{font-size:14px;font-weight:750;color:#244864;padding:14px 16px 12px;margin:0;border-bottom:1px solid #e6edf4;background:#f8fbfe}
+.admin-backoffice .tor-workspace-group-items{display:flex;flex-direction:column}
+.admin-backoffice .tor-workspace-ready button.tor-workspace-item{width:100%!important;min-width:0;display:flex;align-items:center;text-align:left;gap:12px;min-height:82px;padding:14px 16px!important;border:0!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;color:#254761!important;transform:none!important}
+.admin-backoffice .tor-workspace-ready button.tor-workspace-item+button{border-top:1px solid #e8eef4!important}
+.admin-backoffice .tor-workspace-ready button.tor-workspace-item:hover{background:#f3f8fd!important}
+.admin-backoffice .tor-workspace-ready button.tor-workspace-item:focus-visible{outline:2px solid #237bb1!important;outline-offset:-3px}
+.admin-backoffice .tor-workspace-icon{display:grid;place-items:center;flex:0 0 39px;width:39px;height:39px;border-radius:8px;background:#eaf3fa;color:#21648e;font-size:14px;font-weight:750}
+.admin-backoffice .tor-workspace-item-copy{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;line-height:1.4}
+.admin-backoffice .tor-workspace-item-copy strong{font-size:14px;font-weight:750;overflow-wrap:anywhere}
+.admin-backoffice .tor-workspace-item-copy small{font-size:12px;font-weight:400;color:#637c91;overflow-wrap:anywhere}
+.admin-backoffice .tor-workspace-item-action{flex:0 0 auto;font-size:12px;font-weight:700;color:#176ca6;white-space:nowrap}
+.admin-backoffice dialog.tor-workspace-dialog{width:min(1020px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:min(680px,86vh);max-height:min(680px,86dvh);border-radius:13px!important;color:#25445e!important}
+.admin-backoffice dialog.tor-workspace-catalog{height:min(650px,84vh);height:min(650px,84dvh)}
+.admin-backoffice dialog.tor-workspace-signers{width:min(760px,calc(100vw - 32px));height:auto}
+.admin-backoffice dialog.tor-workspace-committee{width:min(880px,calc(100vw - 32px));height:auto}
+.admin-backoffice .tor-workspace-dialog .tor-modal-header{padding:13px 18px;gap:12px}
+.admin-backoffice .tor-workspace-dialog .tor-modal-header h2{font-size:18px!important}
+.admin-backoffice .tor-workspace-dialog .tor-modal-body{padding:14px 18px 16px;min-height:0;overflow:auto;overscroll-behavior:contain}
+.admin-backoffice .tor-workspace-ready .tor-workspace-dialog section.tor-workspace-original{padding:0!important;border:0!important;box-shadow:none!important;border-radius:0!important;background:#fff!important;min-width:0!important;width:100%;margin:0!important}
+.admin-backoffice .tor-workspace-dialog .admin-panel>summary{display:none!important}
+.admin-backoffice .tor-workspace-dialog .admin-panel{min-width:0!important;width:100%}
+.admin-backoffice .tor-workspace-catalog .tor-workspace-body{display:flex;flex-direction:column}
+.admin-backoffice .tor-workspace-catalog .tor-workspace-original,.admin-backoffice .tor-workspace-catalog .admin-panel[open]{display:flex;flex:1 1 auto;flex-direction:column;min-height:0}
+.admin-backoffice .tor-workspace-catalog .compact-find{flex:0 0 auto;padding:0 0 7px}
+.admin-backoffice .tor-workspace-catalog .tor-catalog-tools{flex:0 0 auto;margin:5px 0 10px;gap:6px}
+.admin-backoffice .tor-workspace-catalog .compact-table-viewport{flex:1 1 0;min-height:130px;max-height:none;overscroll-behavior:contain}
+.admin-backoffice .tor-workspace-catalog .compact-pager{flex:0 0 auto;padding:8px 0 0}
+.admin-backoffice .tor-workspace-catalog .compact-table-viewport table{min-width:680px!important}
+.admin-backoffice .tor-workspace-catalog #price-references .compact-table-viewport table{min-width:760px!important}
+.admin-backoffice .tor-workspace-dialog #document-signers form{border:0!important;padding:0!important;margin-top:12px!important;background:#fff!important}
+.admin-backoffice .tor-workspace-dialog #document-signers .compact-subnote{padding:0 0 9px;font-size:12px;line-height:1.55;border-bottom:1px solid #e6edf4}
+.admin-backoffice .tor-workspace-dialog #document-signers form button{min-height:34px;width:auto!important}
+.admin-backoffice .tor-workspace-note{font-size:12px;line-height:1.6;color:#607b90;margin:0 0 10px;overflow-wrap:anywhere}
+.admin-backoffice .tor-workspace-notice{font-size:13px;line-height:1.5;padding:9px 12px;margin:0 0 12px;border:1px solid #bedfce;background:#edf9f2;color:#245e43;border-radius:7px;overflow-wrap:anywhere}
+.admin-backoffice .tor-workspace-notice[data-error="1"]{border-color:#efc5c5;background:#fff6f6;color:#9d2929}
+.admin-backoffice .tor-committee-tools{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.admin-backoffice .tor-committee-search{display:flex;flex-direction:column;gap:4px;flex:1 1 230px;min-width:0}
+.admin-backoffice .tor-committee-search span,.admin-backoffice .tor-committee-field span{font-size:12px;font-weight:700;color:#355773}
+.admin-backoffice .tor-committee-search input,.admin-backoffice .tor-committee-field input{width:100%!important;min-height:36px!important;border:1px solid #cbdfea!important;border-radius:7px!important;padding:7px 10px!important;font-size:13px!important;box-sizing:border-box;background:#fff!important;color:#213d54!important}
+.admin-backoffice .tor-committee-tools button{min-height:36px!important}
+.admin-backoffice .tor-committee-table-wrap{border:1px solid #e0eaf2;border-radius:8px;overflow:auto;max-height:min(43vh,360px);max-height:min(43dvh,360px);overscroll-behavior:contain}
+.admin-backoffice .tor-committee-table{width:100%;min-width:540px;font-size:12px;table-layout:fixed}
+.admin-backoffice .tor-committee-table th{position:sticky;top:0;z-index:1;text-align:left;padding:9px 12px!important;white-space:nowrap}
+.admin-backoffice .tor-committee-table th:first-child{width:27%}.admin-backoffice .tor-committee-table th:nth-child(2){width:52%}.admin-backoffice .tor-committee-table th:last-child{width:21%}
+.admin-backoffice .tor-committee-table td{vertical-align:top;padding:11px 12px!important;overflow-wrap:anywhere;line-height:1.55}
+.admin-backoffice .tor-committee-updated{display:block;color:#627e95;font-size:10px;margin-top:5px}
+.admin-backoffice .tor-committee-person-line+div{margin-top:7px}
+.admin-backoffice .tor-committee-person-line span{font-size:11px;color:#5c7488}
+.admin-backoffice .tor-committee-person-line strong{font-weight:650}
+.admin-backoffice .tor-committee-person-line small{display:block;font-size:11px;color:#627e95}
+.admin-backoffice .tor-committee-row-actions button{min-height:28px!important;font-size:11px!important;padding:5px 8px!important;margin:0 4px 5px 0}
+.admin-backoffice .tor-committee-empty{text-align:center;color:#607b90;padding:24px!important}
+.admin-backoffice .tor-workspace-subtitle{font-size:15px;font-weight:750;margin:0 0 12px;color:#254864}
+.admin-backoffice .tor-committee-form{display:grid;gap:12px}
+.admin-backoffice .tor-committee-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.admin-backoffice .tor-committee-person{padding-top:10px;border-top:1px solid #e6edf4}
+.admin-backoffice .tor-committee-person h4{margin:0 0 6px;font-size:13px;font-weight:750;color:#254864}
+.admin-backoffice .tor-committee-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.admin-backoffice .tor-committee-form .tor-modal-actions{margin:0;padding-top:12px;position:sticky;bottom:0;background:#fff;z-index:2;flex-wrap:wrap}
+.admin-backoffice .tor-committee-delete-name{font-size:14px;font-weight:750;padding:10px;border:1px solid #e6edf4;background:#f8fbfe;border-radius:7px;margin:0 0 10px;overflow-wrap:anywhere}
+.admin-backoffice .tor-committee-form button:disabled,.admin-backoffice .tor-committee-tools button:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+@media(max-width:850px){.admin-backoffice .tor-workspace-menu{grid-template-columns:1fr}.admin-backoffice .tor-workspace-ready button.tor-workspace-item{min-height:72px}.admin-backoffice dialog.tor-workspace-dialog{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}}
+@media(max-width:640px),(max-height:600px){.admin-backoffice .tor-workspace-catalog .tor-workspace-body{display:block;overflow:auto}.admin-backoffice .tor-workspace-catalog .tor-workspace-original,.admin-backoffice .tor-workspace-catalog .admin-panel[open]{display:block}.admin-backoffice .tor-workspace-catalog .compact-table-viewport{max-height:42vh;max-height:42dvh;min-height:100px}.admin-backoffice .tor-committee-fields{grid-template-columns:1fr}}
+@media(max-width:640px){.admin-backoffice .compact-admin-main.tor-workspace-ready{width:calc(100% - 20px)!important}.admin-backoffice .tor-workspace-ready .compact-section-nav{white-space:normal;overflow:visible}.admin-backoffice .tor-workspace-ready button.tor-workspace-item{padding:12px!important;gap:9px}.admin-backoffice .tor-workspace-icon{flex-basis:34px;width:34px;height:34px}.admin-backoffice .tor-workspace-item-action{font-size:11px}.admin-backoffice dialog.tor-workspace-dialog{width:calc(100vw - 16px);max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}.admin-backoffice .tor-workspace-dialog .tor-modal-header{padding:11px 13px}.admin-backoffice .tor-workspace-dialog .tor-modal-body{padding:12px 13px}.admin-backoffice .tor-committee-tools{gap:6px}.admin-backoffice .tor-committee-search{flex-basis:100%}}
+
+/* 20261126b — redesigned dialog interior, one vertical scroll owner.
+ * Native details content is kept open for the existing admin listeners, but it
+ * must not be a constrained flex scroll container (especially Chromium's
+ * generated details-content box). Horizontal overflow remains inside tables.
+ */
+.admin-backoffice dialog.tor-workspace-catalog{height:min(680px,84dvh);max-height:calc(100dvh - 28px)}
+.admin-backoffice .tor-workspace-catalog .tor-workspace-body{display:block!important;flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto!important;overscroll-behavior-y:contain;scrollbar-gutter:stable}
+.admin-backoffice .tor-workspace-catalog .tor-workspace-original,.admin-backoffice .tor-workspace-catalog .admin-panel[open]{display:block!important;min-height:0;height:auto!important;overflow:visible!important}
+.admin-backoffice .tor-workspace-catalog .admin-panel::details-content{display:block;overflow:visible}
+.admin-backoffice .tor-catalog-toolbar{padding:0 0 13px;border-bottom:1px solid #dce7ef;margin-bottom:12px}
+.admin-backoffice .tor-catalog-primary{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.admin-backoffice .tor-catalog-primary .compact-find{flex:1 1 300px;min-width:0;padding:0!important}
+.admin-backoffice .tor-catalog-primary .compact-find-row{gap:6px}
+.admin-backoffice .tor-catalog-primary .compact-find-label{margin-bottom:5px;font-size:12px}
+.admin-backoffice .tor-catalog-primary .compact-find input{min-height:37px!important}
+.admin-backoffice .tor-catalog-primary .tor-catalog-action-group{padding-top:21px}
+.admin-backoffice .tor-catalog-toolbar .tor-catalog-tools{display:block;margin:7px 0 0!important}
+.admin-backoffice .tor-catalog-utility{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.admin-backoffice .tor-catalog-action-group,.admin-backoffice .tor-catalog-danger-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.admin-backoffice .tor-catalog-action-group .tor-template-link{display:inline-flex;align-items:center;padding:6px 9px!important;border:1px solid #d4e0e9!important;background:#fff!important;border-radius:7px;color:#285578!important;text-decoration:none!important;margin:0!important;min-height:32px;font-weight:600;font-size:12px}
+.admin-backoffice .tor-catalog-utility .tor-modal-secondary,.admin-backoffice .tor-catalog-utility .tor-modal-danger{min-height:32px;padding:6px 9px!important;font-size:12px}
+.admin-backoffice .tor-catalog-results-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 8px;color:#274861}
+.admin-backoffice .tor-catalog-results-heading strong{font-size:13px;font-weight:700}
+.admin-backoffice .tor-catalog-results-heading small{font-size:11px;color:#6b8295}
+.admin-backoffice .tor-workspace-catalog .compact-table-viewport{display:block;min-height:0!important;max-height:none!important;height:auto!important;overflow-x:auto!important;overflow-y:hidden!important;overscroll-behavior-y:auto!important;scrollbar-width:thin;flex:none!important}
+.admin-backoffice .tor-workspace-catalog .compact-table-viewport table{margin:0!important;min-width:640px!important}
+.admin-backoffice .tor-workspace-catalog #price-references .compact-table-viewport table{min-width:700px!important}
+.admin-backoffice .tor-workspace-catalog .compact-table-viewport th{position:static;white-space:normal;font-size:12px!important;padding:10px 12px!important}
+.admin-backoffice .tor-workspace-catalog .compact-table-viewport td{padding:9px 12px!important;line-height:1.55}
+.admin-backoffice .tor-workspace-catalog .compact-pager{position:sticky;bottom:-16px;background:#fff;border-top:1px solid #e3ebf1;z-index:2;padding:9px 0!important;margin-top:5px}
+.admin-backoffice .tor-workspace-committee .tor-committee-table-wrap{max-height:none!important;overflow-x:auto;overflow-y:hidden;overscroll-behavior-y:auto}
+.admin-backoffice .tor-workspace-committee .tor-committee-table th{position:static}
+.admin-backoffice .tor-workspace-signers #document-signers .compact-subnote{border:0;padding:0 0 8px;line-height:1.65}
+.admin-backoffice .tor-workspace-signers #document-signers form{margin:0!important;padding:0!important;display:grid;gap:12px}
+.admin-backoffice .tor-signers-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px;min-width:0}
+.admin-backoffice .tor-signer-group{min-width:0;display:grid;gap:10px;align-content:start;padding:13px;border:1px solid #dce7ef;border-radius:9px;background:#f8fbfd}
+.admin-backoffice .tor-signer-group-heading{display:grid;gap:3px;padding-bottom:8px;border-bottom:1px solid #dce7ef;color:#254864}
+.admin-backoffice .tor-signer-group-heading strong{font-size:14px;font-weight:750}
+.admin-backoffice .tor-signer-group-heading small{font-size:11px;color:#627b90}
+.admin-backoffice .tor-signer-group label{display:grid;gap:3px;min-width:0;font-size:12px;font-weight:600;color:#385570}
+.admin-backoffice .tor-signer-group input,.admin-backoffice .tor-signer-group textarea{display:block;width:100%!important;margin:0!important;min-height:36px!important;padding:8px 10px!important;border-radius:7px!important;font-size:13px!important;box-sizing:border-box}
+.admin-backoffice .tor-signer-group textarea{min-height:80px!important;resize:vertical}
+.admin-backoffice .tor-signers-footer{margin:0!important;padding-top:10px!important}
+.admin-backoffice .tor-workspace-ready .tor-workspace-dialog .tor-modal-body{scrollbar-width:thin}
+/* Original add/edit dialogs also receive a compact, consistent surface. */
+.admin-backoffice dialog.tor-edit-modal .tor-modal-header{padding:13px 18px}
+.admin-backoffice dialog.tor-edit-modal .tor-modal-body{padding:15px 18px;overflow-y:auto;overscroll-behavior-y:contain}
+.admin-backoffice dialog.tor-edit-modal .tor-modal-form{gap:10px}
+.admin-backoffice dialog.tor-edit-modal .tor-modal-form input:not([type=hidden]),.admin-backoffice dialog.tor-edit-modal .tor-modal-form textarea{border-radius:7px!important;font-size:13px!important}
+.admin-backoffice dialog.tor-edit-modal .tor-modal-form textarea{min-height:115px}
+@media(max-width:740px){.admin-backoffice .tor-signers-layout{grid-template-columns:1fr}.admin-backoffice .tor-catalog-primary .tor-catalog-action-group{padding-top:0}.admin-backoffice .tor-catalog-primary{gap:6px}.admin-backoffice .tor-catalog-results-heading small{display:none}}
+@media(max-height:600px){.admin-backoffice dialog.tor-workspace-catalog{height:calc(100dvh - 22px)}.admin-backoffice .tor-workspace-catalog .compact-pager{bottom:-12px}}
