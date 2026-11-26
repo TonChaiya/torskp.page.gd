@@ -1,3 +1,68 @@
+# Project status — v1.4.0 canonical
+
+**26 พฤศจิกายน 2569 — Git runtime baseline v1.4.0**
+
+Repository: `TonChaiya/torskp.page.gd` · branch `main` · runtime commit [`c4699b22`](https://github.com/TonChaiya/torskp.page.gd/commit/c4699b22bbb58e563d4983f4fec9e0c119d97164).
+
+- ผู้ใช้ Push แล้วเวลา 09:43:38 ICT (commit timestamp); ข้อความ commit `v1.4.0` / `feat(admin): redesign workspace and add committee management`. ตรวจ Git blob ตรงกับ ZIP Hotfix C ทั้ง 7 ไฟล์. รุ่นนี้เป็น source baseline ไม่ใช่ Git tag หรือการยืนยัน deploy.
+- ผู้ใช้ตอบรับการแก้ UI ล่าสุดและอนุญาต Push; ยังไม่มีการยืนยันการอัปโหลด v1.4.0 ขึ้น InfinityFree หรือ UAT ครบทุกฟังก์ชันบน MySQL/Word จริง. v1.3.0 เป็น Production baseline ล่าสุดที่มีบันทึกยืนยันชัดเจน (25 พ.ย. 2569); ไม่อนุมานว่า Hosting ยังอยู่รุ่นใดในปัจจุบัน.
+- Git baseline มีโค้ด hotfix v1.3.1 ของหลักการและรายงานประชุมอยู่แล้ว; ตรวจพบ `core/meeting_tor_refresh.php` และ renderer ใน `meeting_report.php` ที่รองรับ `price_basis`. ไม่ย้อนกลับไปใช้สูตรราคาเสนออย่างเดียว หรือเริ่มงานที่ปิดแล้วซ้ำโดยไม่มีปัญหาใหม่.
+- เอกสารรอบนี้เป็น docs-only handoff ยังไม่ Push จากผู้ช่วย; HEAD จะเปลี่ยนเมื่อผู้ใช้ commit เอกสาร แต่ runtime baseline ข้างต้นยังเดิม. ไม่เปลี่ยน PHP/JS/CSS, SQL, template, DB หรือ Hosting.
+
+## สถานะปัจจุบัน
+
+| รายการ | สถานะล่าสุด |
+|---|---|
+| GitHub v1.4.0 | Push แล้ว; runtime SHA c4699b22 / ไฟล์ Hotfix C 7/7 ตรง Git |
+| Admin UI + committee CRUD | Implemented; ผู้ใช้ตอบรับ UI ล่าสุดก่อน Push |
+| Regression offline / first paint | 25/25 + 7/7 ตามรายงาน Hotfix C |
+| Laragon/MySQL/Word UAT ครบชุด | ยังไม่ยืนยัน |
+| InfinityFree v1.4.0 | ยังไม่ยืนยัน deploy |
+| DB baseline | v1.1.0 / 12 ตาราง; ไม่มี migration ใน v1.4.0 |
+| Word Merge | V4 เดิม ไม่ใช่หมายเลขรุ่นเว็บไซต์ |
+| ผู้ลงนามรายชุด / master หมวดหมู่ยา | ยังไม่เริ่ม / ต้องแยก scope |
+| Documentation closure v1.4.0 | ชุดนี้พร้อมวางทับและให้ผู้ใช้ Push; ยังไม่ Push |
+
+## ขอบเขตและ contract
+
+- Admin ใหม่: 2 กลุ่ม 4 เมนู (รายการยาและคุณลักษณะ, รายการราคากลาง, ชุดกรรมการ, ผู้เสนอและผู้อนุมัติเอกสาร) เป็น native dialog กลางจอ; ค้นหาและ toolbar อยู่ในหมวด, ปุ่มขนาดพอดี, เลื่อนด้วยเมาส์ใน Popup. First paint ใช้ max-width 1160px ตั้งแต่ CSS ใน head; จอ <=640px เว้นขอบรวม 20px. ถ้า JS ไม่ทำงานหรือช้าเกิน 8 วินาที มี fallback ให้เข้าถึงฟอร์มเดิม; หากปิด JS ไม่ซ่อนฟอร์มเดิม.
+- ย้าย DOM node จริงจาก `admin.php` ไม่ clone; คง ID, input names, form POST action, CSRF, listeners, live search/pagination, CRUD ยา/ราคา, Excel/CSV preview-confirm-cancel, sample templates, export ยาทั้งหมด, Snapshot Review และ safe clear guards. ไม่ปลด guard หรือเปลี่ยน API เดิม.
+- ชุดกรรมการ: ใช้ `committee_sets` เดิม (ประธาน 1 + กรรมการ 2), เพิ่ม/แก้ไข/ลบต้นแบบจาก `admin_committee.php`; requireAdmin และ POST CSRF, prepared statements, transaction, duplicate title protection, row fingerprint, ยืนยันชื่อก่อนลบ, inbound FK guard และ audit. หัวข้อ 1 ยังใช้ต้นแบบเดิม; ชุดเอกสารเก็บรายชื่อ snapshot ไม่เขียนทับจาก Admin. ไม่เปลี่ยนการเลือกกรรมการจากหน้าหลักการเดิม.
+- ค่าเริ่มต้นผู้เสนอ/ผู้อนุมัติใช้ action และ helper เดิมสำหรับหัวข้อ 1; ชุดที่บันทึกชื่อแล้วคงชื่อเดิม ส่วนช่องเดิมที่ว่างอาจ fallback เป็นค่าเริ่มต้นตาม semantics เดิม. ไม่เพิ่ม master หมวดหมู่ยา หรือกำหนดผู้ลงนามรายชุด/รายขั้นในรุ่นนี้; เป็นงานอนาคตที่ต้องแยกแผนและขออนุมัติ.
+- Runtime เปลี่ยน 4 ไฟล์: `admin_committee.php`, `assets/admin-compact.css`, `assets/admin-modal.js`, `assets/admin-workspace.css`. `admin.php` blob เดิม `4f98527ac0fabd570363c2d0b74142f305e22e70`. ไม่เปลี่ยนโค้ดเอกสาร 6 ขั้น, Word/PDF/Word รวม V4, history, auth/core หรือ SQL ใน commit v1.4.0. ไม่มี migration สำหรับ schema baseline v1.1.0 (12 ตาราง); ห้าม import schema/dump ทับฐานเดิม.
+
+ผลทดสอบตามบันทึก Hotfix C: PHP lint และ Node syntax ผ่าน; Chromium offline fixture regression 25/25 และ first-paint 7/7 scenarios ผ่าน รวม 1366×768, 1920×1080, 2560×1080, 390×844 และ fallback. DOM/API mock ไม่ใช่ MySQL/HTTP integration, Word/PDF จริง หรือ Production UAT. รอบ docs-only นี้ตรวจ hash และเนื้อหาเอกสาร ไม่รันชุดทดสอบระบบซ้ำโดยไม่จำเป็น.
+
+รายละเอียด: [Admin Workspace](ADMIN_WORKSPACE_20261126.md) · [Hotfix B](ADMIN_WORKSPACE_HOTFIX_20261126.md) · [Hotfix C / First Paint](ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md).
+
+## Inventory delta — commit v1.4.0
+
+รายการนี้เป็น delta เฉพาะ 7 ไฟล์ใน commit ไม่ใช่ full repository tree audit; inventory รุ่นก่อนใน REPOSITORY_INVENTORY.md เก็บเป็นประวัติ.
+
+| Path | Git blob SHA ณ runtime baseline |
+|---|---|
+| `admin_committee.php` | `383a8a8a93d5e899a98e9c6eef7f60b29fe6dc32` |
+| `assets/admin-compact.css` | `97a20014eb6ba2902c51c65aa422d5bf3c997311` |
+| `assets/admin-modal.js` | `92a08bc2de912f90cc15a59e2f41d54f9c2eb329` |
+| `assets/admin-workspace.css` | `628899ed54c46213933936387e1f8fbca91af73a` |
+| `docs/ADMIN_WORKSPACE_20261126.md` | `e79bd49f018c5828ca1fcb5b3b53e93869c6fa9c` |
+| `docs/ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md` | `6af9854aa8232b2698c35b8edb364ffe976a845a` |
+| `docs/ADMIN_WORKSPACE_HOTFIX_20261126.md` | `db18cdb9c342d7cef92f720d6c0d016ea54028cf` |
+
+## Release gate และงานดูแลต่อ
+
+1. สำรองไฟล์และ DB แบบ private; ตรวจ runtime 4 path บน Laragon/ฐาน clone ตาม schema เดิม; Ctrl+F5 เนื่องจาก version query ใน admin.php ยังไม่เปลี่ยน. ไม่ล้างฐานจริงเพื่อทดสอบ.
+2. ตรวจ 4 Popup, header first paint, mousewheel, live search/pagination, add/edit/delete ข้อมูลทดสอบ, Excel/CSV preview/cancel/confirm, sample/export, Snapshot Review และ clear preview/guard; ไม่ยืนยันล้างคลังจริง. ทดสอบปิด Popup ระหว่าง busy และ fallback เมื่อ JS/CSS ไม่พร้อม.
+3. ตรวจชุดกรรมการ duplicate/stale/CSRF/non-admin, เลือกต้นแบบในหัวข้อ 1 และตรวจรายชื่อเอกสารเก่าไม่เปลี่ยน; ตรวจผู้ลงนามของชุดใหม่และชุดเดิมตาม semantics เดิม. เปิดเอกสารเก่าทั้ง 6 ขั้น, Word/PDF/Word รวม V4 และปุ่มดึง TOR ล่าสุดในรายงานประชุม (ทั้ง reference/offer, package, preview ไม่ save เอง).
+4. เมื่อผู้ใช้ยืนยัน Dev แล้วจึงอัปโหลด runtime 4 ไฟล์ผ่าน FileZilla และ smoke-test InfinityFree; บันทึกผลจริงก่อนประกาศ Production release. ไม่อัปโหลด docs/tests/tools/ZIP/SQL dump และไม่เขียนทับ config ฐานจริง.
+5. Rollback code: คืน `assets/admin-modal.js` และ `assets/admin-compact.css` จากก่อน v1.4.0; หลังคืน assets จึงนำไฟล์ใหม่อีกสองไฟล์ออกได้หากต้องการ. การ rollback code ไม่ย้อนการแก้ต้นแบบกรรมการที่บันทึกแล้ว; หากจำเป็นกู้เฉพาะข้อมูลต้นแบบจาก backup โดยไม่ restore ทับเอกสารทั้งหมด.
+
+งานสำรอง/restore drill, ตรวจการป้องกัน core/storage/HTTPS, จำกัด access และประเมินความเสี่ยง dump/staging ใน Git history จากเอกสารเก่ายังไม่มีหลักฐานปิดงาน; ไม่ดำเนินการเองและไม่ rewrite Git history. ปรับผู้ลงนามรายชุด/รายเอกสารเมื่อผู้ใช้ขอและวิเคราะห์ snapshot/DB contract ก่อน. ไม่สร้างหมวดหมู่ยาใหม่โดยพลการ.
+
+---
+
+> **ประวัติเดิม (เก็บครบตาม Git blob ก่อนปรับ v1.4.0):** ข้อมูลเวอร์ชัน, HEAD, สถานะ candidate, คำว่า "ปัจจุบัน" และคำสั่ง release ในเนื้อหาด้านล่างอ้างอิงช่วงเวลาที่เขียน ไม่ใช่สถานะล่าสุด ให้ยึดส่วน v1.4.0 ด้านบนและ PROJECT_STATUS เป็นหลักสำหรับสถานะ; ข้อกำหนดทางเทคนิคเดิมยังมีผลเว้นแต่มีการแก้ไขชัดเจนในส่วนใหม่.
+
 # v1.3.1 — Meeting price refresh correction
 
 **25 พฤศจิกายน 2569 — v1.3.1 follow-up: Meeting TOR price basis (candidate)**

@@ -1,3 +1,34 @@
+# Development — release gate v1.4.0
+
+**26 พฤศจิกายน 2569 — Git runtime baseline v1.4.0**
+
+Repository: `TonChaiya/torskp.page.gd` · branch `main` · runtime commit [`c4699b22`](https://github.com/TonChaiya/torskp.page.gd/commit/c4699b22bbb58e563d4983f4fec9e0c119d97164).
+
+- ผู้ใช้ Push แล้วเวลา 09:43:38 ICT (commit timestamp); ข้อความ commit `v1.4.0` / `feat(admin): redesign workspace and add committee management`. ตรวจ Git blob ตรงกับ ZIP Hotfix C ทั้ง 7 ไฟล์. รุ่นนี้เป็น source baseline ไม่ใช่ Git tag หรือการยืนยัน deploy.
+- ผู้ใช้ตอบรับการแก้ UI ล่าสุดและอนุญาต Push; ยังไม่มีการยืนยันการอัปโหลด v1.4.0 ขึ้น InfinityFree หรือ UAT ครบทุกฟังก์ชันบน MySQL/Word จริง. v1.3.0 เป็น Production baseline ล่าสุดที่มีบันทึกยืนยันชัดเจน (25 พ.ย. 2569); ไม่อนุมานว่า Hosting ยังอยู่รุ่นใดในปัจจุบัน.
+- Git baseline มีโค้ด hotfix v1.3.1 ของหลักการและรายงานประชุมอยู่แล้ว; ตรวจพบ `core/meeting_tor_refresh.php` และ renderer ใน `meeting_report.php` ที่รองรับ `price_basis`. ไม่ย้อนกลับไปใช้สูตรราคาเสนออย่างเดียว หรือเริ่มงานที่ปิดแล้วซ้ำโดยไม่มีปัญหาใหม่.
+- เอกสารรอบนี้เป็น docs-only handoff ยังไม่ Push จากผู้ช่วย; HEAD จะเปลี่ยนเมื่อผู้ใช้ commit เอกสาร แต่ runtime baseline ข้างต้นยังเดิม. ไม่เปลี่ยน PHP/JS/CSS, SQL, template, DB หรือ Hosting.
+
+## Regression ตาม scope Admin
+
+ผลทดสอบตามบันทึก Hotfix C: PHP lint และ Node syntax ผ่าน; Chromium offline fixture regression 25/25 และ first-paint 7/7 scenarios ผ่าน รวม 1366×768, 1920×1080, 2560×1080, 390×844 และ fallback. DOM/API mock ไม่ใช่ MySQL/HTTP integration, Word/PDF จริง หรือ Production UAT. รอบ docs-only นี้ตรวจ hash และเนื้อหาเอกสาร ไม่รันชุดทดสอบระบบซ้ำโดยไม่จำเป็น.
+
+1. สำรองไฟล์และ DB แบบ private; ตรวจ runtime 4 path บน Laragon/ฐาน clone ตาม schema เดิม; Ctrl+F5 เนื่องจาก version query ใน admin.php ยังไม่เปลี่ยน. ไม่ล้างฐานจริงเพื่อทดสอบ.
+2. ตรวจ 4 Popup, header first paint, mousewheel, live search/pagination, add/edit/delete ข้อมูลทดสอบ, Excel/CSV preview/cancel/confirm, sample/export, Snapshot Review และ clear preview/guard; ไม่ยืนยันล้างคลังจริง. ทดสอบปิด Popup ระหว่าง busy และ fallback เมื่อ JS/CSS ไม่พร้อม.
+3. ตรวจชุดกรรมการ duplicate/stale/CSRF/non-admin, เลือกต้นแบบในหัวข้อ 1 และตรวจรายชื่อเอกสารเก่าไม่เปลี่ยน; ตรวจผู้ลงนามของชุดใหม่และชุดเดิมตาม semantics เดิม. เปิดเอกสารเก่าทั้ง 6 ขั้น, Word/PDF/Word รวม V4 และปุ่มดึง TOR ล่าสุดในรายงานประชุม (ทั้ง reference/offer, package, preview ไม่ save เอง).
+4. เมื่อผู้ใช้ยืนยัน Dev แล้วจึงอัปโหลด runtime 4 ไฟล์ผ่าน FileZilla และ smoke-test InfinityFree; บันทึกผลจริงก่อนประกาศ Production release. ไม่อัปโหลด docs/tests/tools/ZIP/SQL dump และไม่เขียนทับ config ฐานจริง.
+5. Rollback code: คืน `assets/admin-modal.js` และ `assets/admin-compact.css` จากก่อน v1.4.0; หลังคืน assets จึงนำไฟล์ใหม่อีกสองไฟล์ออกได้หากต้องการ. การ rollback code ไม่ย้อนการแก้ต้นแบบกรรมการที่บันทึกแล้ว; หากจำเป็นกู้เฉพาะข้อมูลต้นแบบจาก backup โดยไม่ restore ทับเอกสารทั้งหมด.
+
+## Docs-only closure
+
+ตรวจ `git status --short`, `git diff --check`, `git diff --stat` และ staged paths. ไม่ต้องรัน PHP lint/MySQL/Word ซ้ำเมื่อมีแต่ Markdown. วางทับไฟล์ Markdown ตาม path เดิม; เก็บ ZIP นอก repo. ใช้ commit `docs: consolidate v1.4.0 project status and release documentation`; ตรวจ remote SHA หลัง Push. หาก HEAD เปลี่ยนก่อนวางทับ ให้เปรียบเทียบกับไฟล์ใหม่ก่อน ไม่ reset หรือ overwrite งานค้าง.
+
+รายละเอียด: [Admin Workspace](ADMIN_WORKSPACE_20261126.md) · [Hotfix B](ADMIN_WORKSPACE_HOTFIX_20261126.md) · [Hotfix C / First Paint](ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md).
+
+---
+
+> **ประวัติเดิม (เก็บครบตาม Git blob ก่อนปรับ v1.4.0):** ข้อมูลเวอร์ชัน, HEAD, สถานะ candidate, คำว่า "ปัจจุบัน" และคำสั่ง release ในเนื้อหาด้านล่างอ้างอิงช่วงเวลาที่เขียน ไม่ใช่สถานะล่าสุด ให้ยึดส่วน v1.4.0 ด้านบนและ PROJECT_STATUS เป็นหลักสำหรับสถานะ; ข้อกำหนดทางเทคนิคเดิมยังมีผลเว้นแต่มีการแก้ไขชัดเจนในส่วนใหม่.
+
 # v1.3.1 — Meeting price refresh correction
 
 **25 พฤศจิกายน 2569 — v1.3.1 follow-up: Meeting TOR price basis (candidate)**

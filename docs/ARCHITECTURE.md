@@ -1,3 +1,34 @@
+# Architecture — Admin Workspace v1.4.0
+
+**26 พฤศจิกายน 2569 — Git runtime baseline v1.4.0**
+
+Repository: `TonChaiya/torskp.page.gd` · branch `main` · runtime commit [`c4699b22`](https://github.com/TonChaiya/torskp.page.gd/commit/c4699b22bbb58e563d4983f4fec9e0c119d97164).
+
+- ผู้ใช้ Push แล้วเวลา 09:43:38 ICT (commit timestamp); ข้อความ commit `v1.4.0` / `feat(admin): redesign workspace and add committee management`. ตรวจ Git blob ตรงกับ ZIP Hotfix C ทั้ง 7 ไฟล์. รุ่นนี้เป็น source baseline ไม่ใช่ Git tag หรือการยืนยัน deploy.
+- ผู้ใช้ตอบรับการแก้ UI ล่าสุดและอนุญาต Push; ยังไม่มีการยืนยันการอัปโหลด v1.4.0 ขึ้น InfinityFree หรือ UAT ครบทุกฟังก์ชันบน MySQL/Word จริง. v1.3.0 เป็น Production baseline ล่าสุดที่มีบันทึกยืนยันชัดเจน (25 พ.ย. 2569); ไม่อนุมานว่า Hosting ยังอยู่รุ่นใดในปัจจุบัน.
+- Git baseline มีโค้ด hotfix v1.3.1 ของหลักการและรายงานประชุมอยู่แล้ว; ตรวจพบ `core/meeting_tor_refresh.php` และ renderer ใน `meeting_report.php` ที่รองรับ `price_basis`. ไม่ย้อนกลับไปใช้สูตรราคาเสนออย่างเดียว หรือเริ่มงานที่ปิดแล้วซ้ำโดยไม่มีปัญหาใหม่.
+- เอกสารรอบนี้เป็น docs-only handoff ยังไม่ Push จากผู้ช่วย; HEAD จะเปลี่ยนเมื่อผู้ใช้ commit เอกสาร แต่ runtime baseline ข้างต้นยังเดิม. ไม่เปลี่ยน PHP/JS/CSS, SQL, template, DB หรือ Hosting.
+
+## Delta ของโครงสร้าง (ไม่เปลี่ยน framework)
+
+| Path | Contract ปัจจุบัน |
+|---|---|
+| `admin.php` | Server-rendered markup/CRUD, requireAdmin/POST CSRF, catalog/search/import/export/clear/signer defaults เดิม; blob ไม่เปลี่ยน |
+| `assets/admin-modal.js` | Controller เดิม + workspace enhancement, ย้าย DOM จริงเข้า dialog, committee UI, deep links และ fallback |
+| `assets/admin-compact.css` | CSS จาก head; first paint width/padding คงที่และยุบ grid ระหว่าง JS เตรียม UI |
+| `assets/admin-workspace.css` | Scoped layout 2 กลุ่ม 4 เมนู, dialog body scroll, toolbar/table/form styles |
+| `admin_committee.php` | Admin-only JSON สำหรับ list/create/update/delete ต้นแบบ; requireAdmin/CSRF, transaction/fingerprint/duplicate-title/FK guard/audit |
+| `committee_sets` | ตารางเดิม ประธาน 1 กรรมการ 2; ใช้ร่วมหน้า principle; ไม่อ้างเป็นตาราง case document |
+| `core/document_signer_defaults.php` | unchanged; load/save ค่าเริ่มต้นหัวข้อ 1 |
+
+ข้อมูลยา/ราคาใช้ routes และ core/import/snapshot เดิม. `change_password.php` ยังเป็น account center. ไม่เพิ่ม service/worker/schema; workflow 6 ขั้นและ merge V4 คงเดิม. `core/meeting_tor_refresh.php` ของ hotfix ก่อนหน้ายังอยู่ Git และคง price_basis/case isolation/fingerprint; ไม่แก้ใน v1.4.0.
+
+รายละเอียด: [Admin Workspace](ADMIN_WORKSPACE_20261126.md) · [Hotfix B](ADMIN_WORKSPACE_HOTFIX_20261126.md) · [Hotfix C / First Paint](ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md).
+
+---
+
+> **ประวัติเดิม (เก็บครบตาม Git blob ก่อนปรับ v1.4.0):** ข้อมูลเวอร์ชัน, HEAD, สถานะ candidate, คำว่า "ปัจจุบัน" และคำสั่ง release ในเนื้อหาด้านล่างอ้างอิงช่วงเวลาที่เขียน ไม่ใช่สถานะล่าสุด ให้ยึดส่วน v1.4.0 ด้านบนและ PROJECT_STATUS เป็นหลักสำหรับสถานะ; ข้อกำหนดทางเทคนิคเดิมยังมีผลเว้นแต่มีการแก้ไขชัดเจนในส่วนใหม่.
+
 # v1.3.1 — Meeting price refresh correction
 
 **25 พฤศจิกายน 2569 — v1.3.1 follow-up: Meeting TOR price basis (candidate)**

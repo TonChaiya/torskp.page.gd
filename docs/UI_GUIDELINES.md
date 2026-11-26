@@ -1,3 +1,31 @@
+# UI Guidelines — Admin v1.4.0
+
+**26 พฤศจิกายน 2569 — Git runtime baseline v1.4.0**
+
+Repository: `TonChaiya/torskp.page.gd` · branch `main` · runtime commit [`c4699b22`](https://github.com/TonChaiya/torskp.page.gd/commit/c4699b22bbb58e563d4983f4fec9e0c119d97164).
+
+- ผู้ใช้ Push แล้วเวลา 09:43:38 ICT (commit timestamp); ข้อความ commit `v1.4.0` / `feat(admin): redesign workspace and add committee management`. ตรวจ Git blob ตรงกับ ZIP Hotfix C ทั้ง 7 ไฟล์. รุ่นนี้เป็น source baseline ไม่ใช่ Git tag หรือการยืนยัน deploy.
+- ผู้ใช้ตอบรับการแก้ UI ล่าสุดและอนุญาต Push; ยังไม่มีการยืนยันการอัปโหลด v1.4.0 ขึ้น InfinityFree หรือ UAT ครบทุกฟังก์ชันบน MySQL/Word จริง. v1.3.0 เป็น Production baseline ล่าสุดที่มีบันทึกยืนยันชัดเจน (25 พ.ย. 2569); ไม่อนุมานว่า Hosting ยังอยู่รุ่นใดในปัจจุบัน.
+- Git baseline มีโค้ด hotfix v1.3.1 ของหลักการและรายงานประชุมอยู่แล้ว; ตรวจพบ `core/meeting_tor_refresh.php` และ renderer ใน `meeting_report.php` ที่รองรับ `price_basis`. ไม่ย้อนกลับไปใช้สูตรราคาเสนออย่างเดียว หรือเริ่มงานที่ปิดแล้วซ้ำโดยไม่มีปัญหาใหม่.
+- เอกสารรอบนี้เป็น docs-only handoff ยังไม่ Push จากผู้ช่วย; HEAD จะเปลี่ยนเมื่อผู้ใช้ commit เอกสาร แต่ runtime baseline ข้างต้นยังเดิม. ไม่เปลี่ยน PHP/JS/CSS, SQL, template, DB หรือ Hosting.
+
+## มาตรฐานหน้าจอ Admin ล่าสุด
+
+- ธีมฟ้า-ขาว กระชับ centered max-width 1160px; จอเล็ก <=640px เว้นขอบรวม 20px. Header ไม่ขยายเต็มจอแล้วหดหลัง JS พร้อม; grid เก่าไม่จองพื้นที่ระหว่างรอ. ทดสอบ slow JS และ CSS fallback ไม่ให้หน้า Admin ใช้งานไม่ได้.
+- แบ่ง 2 กลุ่ม 4 เมนูชัดเจน: ยา/ราคากลาง และชุดกรรมการ/ผู้เสนอผู้อนุมัติ. คลิกเมนูเปิด native dialog กลางจอ; ไม่ยืดหน้าเดิมลงล่าง. ปุ่มไม่ยืดเต็มแถวโดยไม่จำเป็น.
+- Popup มีขนาดพอดี viewport, header/ปุ่มควบคุมชัดเจน; mousewheel เมื่อวางเมาส์ตรงกลางหรือบนตารางเลื่อนเนื้อหาได้, ตารางกว้างเลื่อนแนวนอนได้, ไม่เลื่อนพื้นหลัง. รักษา focus/keyboard/close และ busy/confirmation/error states เดิม.
+- จัดกลุ่มค้นหา/เพิ่ม/นำเข้า/ส่งออก/ตรวจ Snapshot/ล้างข้อมูลชัดเจน; ไม่ซ่อนฟังก์ชันเดิม. รักษา live search, pagination, ไม่ reload/กระโดดหน้าหลักตอนค้นหา; การแก้ไขเปิด Popup เดิม, ไม่ clone หรือเปลี่ยน form contract.
+- ชุดกรรมการแสดงประธานและกรรมการสองคน, เพิ่ม/แก้ไข/ลบต้นแบบพร้อมยืนยันชื่อและตรวจ stale. ผู้เสนอและผู้อนุมัติแยกส่วนกรอก ใช้ field เดิม; ไม่มี per-case override ใหม่.
+- ไม่แก้ layout ของ 6 ขั้น, Word/PDF, history หรือ login/account center เพียงเพราะเปลี่ยน Admin.
+
+ผลทดสอบตามบันทึก Hotfix C: PHP lint และ Node syntax ผ่าน; Chromium offline fixture regression 25/25 และ first-paint 7/7 scenarios ผ่าน รวม 1366×768, 1920×1080, 2560×1080, 390×844 และ fallback. DOM/API mock ไม่ใช่ MySQL/HTTP integration, Word/PDF จริง หรือ Production UAT. รอบ docs-only นี้ตรวจ hash และเนื้อหาเอกสาร ไม่รันชุดทดสอบระบบซ้ำโดยไม่จำเป็น.
+
+รายละเอียด: [Admin Workspace](ADMIN_WORKSPACE_20261126.md) · [Hotfix B](ADMIN_WORKSPACE_HOTFIX_20261126.md) · [Hotfix C / First Paint](ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md).
+
+---
+
+> **ประวัติเดิม (เก็บครบตาม Git blob ก่อนปรับ v1.4.0):** ข้อมูลเวอร์ชัน, HEAD, สถานะ candidate, คำว่า "ปัจจุบัน" และคำสั่ง release ในเนื้อหาด้านล่างอ้างอิงช่วงเวลาที่เขียน ไม่ใช่สถานะล่าสุด ให้ยึดส่วน v1.4.0 ด้านบนและ PROJECT_STATUS เป็นหลักสำหรับสถานะ; ข้อกำหนดทางเทคนิคเดิมยังมีผลเว้นแต่มีการแก้ไขชัดเจนในส่วนใหม่.
+
 # v1.3.1 — Maintenance hotfix
 
 **25 พฤศจิกายน 2569 — v1.3.1 Hotfix (candidate):** v1.3.0 ยังเป็น Production baseline ที่ผู้ใช้ยืนยัน; Git HEAD ก่อนแก้ `7aec524d106b1c4a61653fa4c9d518a6d07d7c07` เป็น docs closure ที่ Push แล้ว. ผู้ใช้รายงานสองปัญหาหลังขึ้น Production และอนุมัติแก้เฉพาะจุด. Hotfix ยังไม่ได้ Push หรือ deploy และรอผู้ใช้ทดสอบ Dev/Production. ไม่มี migration. ข้อมูลประวัติเดิมด้านล่างคงอยู่ครบ.

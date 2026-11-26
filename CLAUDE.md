@@ -1,3 +1,22 @@
+# CLAUDE — จุดเริ่มต้น v1.4.0
+
+**26 พฤศจิกายน 2569 — Git runtime baseline v1.4.0**
+
+Repository: `TonChaiya/torskp.page.gd` · branch `main` · runtime commit [`c4699b22`](https://github.com/TonChaiya/torskp.page.gd/commit/c4699b22bbb58e563d4983f4fec9e0c119d97164).
+
+- ผู้ใช้ Push แล้วเวลา 09:43:38 ICT (commit timestamp); ข้อความ commit `v1.4.0` / `feat(admin): redesign workspace and add committee management`. ตรวจ Git blob ตรงกับ ZIP Hotfix C ทั้ง 7 ไฟล์. รุ่นนี้เป็น source baseline ไม่ใช่ Git tag หรือการยืนยัน deploy.
+- ผู้ใช้ตอบรับการแก้ UI ล่าสุดและอนุญาต Push; ยังไม่มีการยืนยันการอัปโหลด v1.4.0 ขึ้น InfinityFree หรือ UAT ครบทุกฟังก์ชันบน MySQL/Word จริง. v1.3.0 เป็น Production baseline ล่าสุดที่มีบันทึกยืนยันชัดเจน (25 พ.ย. 2569); ไม่อนุมานว่า Hosting ยังอยู่รุ่นใดในปัจจุบัน.
+- Git baseline มีโค้ด hotfix v1.3.1 ของหลักการและรายงานประชุมอยู่แล้ว; ตรวจพบ `core/meeting_tor_refresh.php` และ renderer ใน `meeting_report.php` ที่รองรับ `price_basis`. ไม่ย้อนกลับไปใช้สูตรราคาเสนออย่างเดียว หรือเริ่มงานที่ปิดแล้วซ้ำโดยไม่มีปัญหาใหม่.
+- เอกสารรอบนี้เป็น docs-only handoff ยังไม่ Push จากผู้ช่วย; HEAD จะเปลี่ยนเมื่อผู้ใช้ commit เอกสาร แต่ runtime baseline ข้างต้นยังเดิม. ไม่เปลี่ยน PHP/JS/CSS, SQL, template, DB หรือ Hosting.
+
+ใช้ [AGENTS.md](AGENTS.md) เป็นกฎหลักร่วมกันกับ Codex และ AI อื่น อ่าน [PROJECT_STATUS](docs/PROJECT_STATUS.md) ก่อนทุกงาน จากนั้น [WORKFLOW](docs/WORKFLOW.md), [ARCHITECTURE](docs/ARCHITECTURE.md) และคู่มือเฉพาะ scope. งาน Admin อ่าน [UI_GUIDELINES](docs/UI_GUIDELINES.md) และรายงาน Hotfix ทั้งสามฉบับ. งานคลังและเอกสารอ่าน Import/Snapshot; งาน Word อ่าน WORD_EXPORT. ห้ามใช้สถานะเก่าเป็นคำสั่งเริ่มใหม่ ห้ามแก้ PHP/DB/Word หรือ commit/push นอกขอบเขตที่อนุมัติ. ตรวจ HEAD จริงและรักษาเอกสารเก่า/กฎเดิม; ทดสอบตามผลกระทบและไม่อ้างผลจริงจาก mock.
+
+รายละเอียด: [Admin Workspace](docs/ADMIN_WORKSPACE_20261126.md) · [Hotfix B](docs/ADMIN_WORKSPACE_HOTFIX_20261126.md) · [Hotfix C / First Paint](docs/ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md).
+
+---
+
+> **ประวัติเดิม (เก็บครบตาม Git blob ก่อนปรับ v1.4.0):** ข้อมูลเวอร์ชัน, HEAD, สถานะ candidate, คำว่า "ปัจจุบัน" และคำสั่ง release ในเนื้อหาด้านล่างอ้างอิงช่วงเวลาที่เขียน ไม่ใช่สถานะล่าสุด ให้ยึดส่วน v1.4.0 ด้านบนและ PROJECT_STATUS เป็นหลักสำหรับสถานะ; ข้อกำหนดทางเทคนิคเดิมยังมีผลเว้นแต่มีการแก้ไขชัดเจนในส่วนใหม่.
+
 # v1.3.1 — Meeting price refresh correction
 
 **25 พฤศจิกายน 2569 — v1.3.1 follow-up: Meeting TOR price basis (candidate)**

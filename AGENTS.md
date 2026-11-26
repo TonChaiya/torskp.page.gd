@@ -1,3 +1,28 @@
+# AGENTS — กฎปัจจุบัน v1.4.0
+
+**26 พฤศจิกายน 2569 — Git runtime baseline v1.4.0**
+
+Repository: `TonChaiya/torskp.page.gd` · branch `main` · runtime commit [`c4699b22`](https://github.com/TonChaiya/torskp.page.gd/commit/c4699b22bbb58e563d4983f4fec9e0c119d97164).
+
+- ผู้ใช้ Push แล้วเวลา 09:43:38 ICT (commit timestamp); ข้อความ commit `v1.4.0` / `feat(admin): redesign workspace and add committee management`. ตรวจ Git blob ตรงกับ ZIP Hotfix C ทั้ง 7 ไฟล์. รุ่นนี้เป็น source baseline ไม่ใช่ Git tag หรือการยืนยัน deploy.
+- ผู้ใช้ตอบรับการแก้ UI ล่าสุดและอนุญาต Push; ยังไม่มีการยืนยันการอัปโหลด v1.4.0 ขึ้น InfinityFree หรือ UAT ครบทุกฟังก์ชันบน MySQL/Word จริง. v1.3.0 เป็น Production baseline ล่าสุดที่มีบันทึกยืนยันชัดเจน (25 พ.ย. 2569); ไม่อนุมานว่า Hosting ยังอยู่รุ่นใดในปัจจุบัน.
+- Git baseline มีโค้ด hotfix v1.3.1 ของหลักการและรายงานประชุมอยู่แล้ว; ตรวจพบ `core/meeting_tor_refresh.php` และ renderer ใน `meeting_report.php` ที่รองรับ `price_basis`. ไม่ย้อนกลับไปใช้สูตรราคาเสนออย่างเดียว หรือเริ่มงานที่ปิดแล้วซ้ำโดยไม่มีปัญหาใหม่.
+- เอกสารรอบนี้เป็น docs-only handoff ยังไม่ Push จากผู้ช่วย; HEAD จะเปลี่ยนเมื่อผู้ใช้ commit เอกสาร แต่ runtime baseline ข้างต้นยังเดิม. ไม่เปลี่ยน PHP/JS/CSS, SQL, template, DB หรือ Hosting.
+
+## อ่านก่อนเริ่มงาน
+
+1. ตรวจ `git status --short`, branch, HEAD และ origin/main จริง; อ่าน [PROJECT_STATUS](docs/PROJECT_STATUS.md), [WORKFLOW](docs/WORKFLOW.md), [ARCHITECTURE](docs/ARCHITECTURE.md) และคู่มือเฉพาะ scope. อ่านไฟล์ runtime และประวัติที่เกี่ยวข้องจริงก่อนเขียนโค้ด; สรุปแผนและผลกระทบก่อนแก้. ไม่ย้อนงานเดิมโดยไม่มีคำสั่งใหม่.
+2. งาน Admin อ่าน [UI_GUIDELINES](docs/UI_GUIDELINES.md), [Admin Workspace](docs/ADMIN_WORKSPACE_20261126.md), [Hotfix B](docs/ADMIN_WORKSPACE_HOTFIX_20261126.md), [Hotfix C](docs/ADMIN_WORKSPACE_FIRST_PAINT_20261126c.md), [IMPORT_SYSTEM](docs/IMPORT_SYSTEM.md) และ [DOCUMENT_SNAPSHOT](docs/DOCUMENT_SNAPSHOT.md). รักษา fallback/first paint/wheel และ DOM identity; ไม่เปลี่ยน field/action/CSRF/listeners หรือ guard.
+3. งานชุดกรรมการใช้ `committee_sets` เดิมเท่านั้น; ห้ามเขียนรายชื่อย้อนเข้า case/document/history, ห้ามข้าม requireAdmin/CSRF/fingerprint/confirmation/FK guard. ค่าเริ่มต้นผู้ลงนามคงเฉพาะหัวข้อ 1; ช่องว่างเดิม fallback ตาม contract. ไม่เพิ่ม category, migration หรือ signer per case โดยไม่ได้รับอนุมัติ.
+4. รักษากฎเดิมทั้งหมด: case/history isolation, workflow 6 ขั้น, Word/PDF/Word รวม V4, Thai layout, TOR price_basis reference/offer และ package semantics. v1.3.1 meeting refresh เป็น preview ก่อนผู้ใช้ save เอง. Guard ล้าง medicines ใช้ snapshot readiness v1.3.0 เหนือ blanket guard v1.2.0: issues/recoverable ต้องเป็นศูนย์และตรวจ count/hash, backup ack, transaction, Admin+CSRF; deferred ต้องแสดงตาม contract ไม่เดาข้อมูล. ห้ามลบเอกสารเพื่อแก้ guard.
+5. ทดสอบเฉพาะ scope และ regression ที่ได้รับผลกระทบ; ไม่รันทุก suite ซ้ำโดยไม่มีเหตุผล. รายงาน mock แยกจาก DB/Word/Hosting จริง; งาน docs-only ตรวจ Markdown/diff/hash/staged paths เท่านั้น. ไม่มี installer, ไม่ commit secrets/backup/dump/staging/vendor, ไม่ reset/clean/force push. Push เมื่อผู้ใช้สั่งเท่านั้น.
+
+ผลทดสอบตามบันทึก Hotfix C: PHP lint และ Node syntax ผ่าน; Chromium offline fixture regression 25/25 และ first-paint 7/7 scenarios ผ่าน รวม 1366×768, 1920×1080, 2560×1080, 390×844 และ fallback. DOM/API mock ไม่ใช่ MySQL/HTTP integration, Word/PDF จริง หรือ Production UAT. รอบ docs-only นี้ตรวจ hash และเนื้อหาเอกสาร ไม่รันชุดทดสอบระบบซ้ำโดยไม่จำเป็น.
+
+---
+
+> **ประวัติเดิม (เก็บครบตาม Git blob ก่อนปรับ v1.4.0):** ข้อมูลเวอร์ชัน, HEAD, สถานะ candidate, คำว่า "ปัจจุบัน" และคำสั่ง release ในเนื้อหาด้านล่างอ้างอิงช่วงเวลาที่เขียน ไม่ใช่สถานะล่าสุด ให้ยึดส่วน v1.4.0 ด้านบนและ PROJECT_STATUS เป็นหลักสำหรับสถานะ; ข้อกำหนดทางเทคนิคเดิมยังมีผลเว้นแต่มีการแก้ไขชัดเจนในส่วนใหม่.
+
 # v1.3.1 — Meeting price refresh correction
 
 **25 พฤศจิกายน 2569 — v1.3.1 follow-up: Meeting TOR price basis (candidate)**
